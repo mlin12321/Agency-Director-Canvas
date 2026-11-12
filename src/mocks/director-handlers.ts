@@ -11,7 +11,7 @@ import {
 } from "#/api/director/types";
 
 /**
- * MSW handlers for the director sidecar, so `npm run dev:mock` renders the
+ * MSW handlers for the Agent Server director API, so `npm run dev:mock` renders the
  * org chart without one running. The tree is small and static: one root, a
  * few domains, and a few modules under each.
  */
@@ -20,9 +20,9 @@ const BASE = `*${DIRECTOR_BASE_PATH}`;
 const ROOT_ID = "root";
 
 const POD: AgentRef[] = [
-  { role: "lead_ic", conversationId: null, status: "running" },
-  { role: "manager", conversationId: null, status: "idle" },
-  { role: "reviewer", conversationId: null, status: "idle" },
+  { role: "lead_ic", conversation_id: null, status: "running" },
+  { role: "manager", conversation_id: null, status: "idle" },
+  { role: "reviewer", conversation_id: null, status: "idle" },
 ];
 
 const DOMAINS: Array<{ name: string; health: NodeHealth }> = [
@@ -65,8 +65,8 @@ function buildMockTree() {
       const id = `${domain.name}.${module.name}`;
       nodes.set(id, {
         id,
-        parentId: domain.name,
-        childIds: [],
+        parent_id: domain.name,
+        child_ids: [],
         title: `${domain.name}/${module.name}`,
         boundary: {
           path: `${path}/${module.name}`,
@@ -74,42 +74,42 @@ function buildMockTree() {
           readonly: [`${path}/contracts/**`],
         },
         isolation: "shared",
-        worktreePath: `.worktrees/${domain.name}`,
+        worktree_path: `.worktrees/${domain.name}`,
         branch: `agents/${domain.name}`,
         agents: POD,
         health: module.health,
-        specSummary: `Implements ${module.name} for ${domain.name}.`,
-        descendantCounts: zeroCounts(),
+        spec_summary: `Implements ${module.name} for ${domain.name}.`,
+        descendant_counts: zeroCounts(),
       });
     });
     nodes.set(domain.name, {
       id: domain.name,
-      parentId: ROOT_ID,
-      childIds: MODULES.map((module) => `${domain.name}.${module.name}`),
+      parent_id: ROOT_ID,
+      child_ids: MODULES.map((module) => `${domain.name}.${module.name}`),
       title: `${domain.name} domain`,
       boundary: { path, writable: [`${path}/*.md`], readonly: [] },
       isolation: "worktree",
-      worktreePath: `.worktrees/${domain.name}`,
+      worktree_path: `.worktrees/${domain.name}`,
       branch: `agents/${domain.name}`,
       agents: POD,
       health: domain.health,
-      specSummary: `Interface contracts between the ${domain.name} services.`,
-      descendantCounts: { ...moduleCounts },
+      spec_summary: `Interface contracts between the ${domain.name} services.`,
+      descendant_counts: { ...moduleCounts },
     });
   });
   nodes.set(ROOT_ID, {
     id: ROOT_ID,
-    parentId: null,
-    childIds: DOMAINS.map((domain) => domain.name),
+    parent_id: null,
+    child_ids: DOMAINS.map((domain) => domain.name),
     title: "Root organization",
     boundary: { path: "", writable: [], readonly: ["**"] },
     isolation: "worktree",
-    worktreePath: ".",
+    worktree_path: ".",
     branch: "main",
     agents: POD,
     health: "converging",
-    specSummary: "Owns cross-domain contracts and the release plan.",
-    descendantCounts: rootCounts,
+    spec_summary: "Owns cross-domain contracts and the release plan.",
+    descendant_counts: rootCounts,
   });
   return nodes;
 }
@@ -120,15 +120,15 @@ function snapshot(focusId: NodeId): OrgEvent | null {
   const focus = tree.get(focusId);
   if (!focus) return null;
   const ancestors: OrgNode[] = [];
-  let parent = focus.parentId === null ? undefined : tree.get(focus.parentId);
+  let parent = focus.parent_id === null ? undefined : tree.get(focus.parent_id);
   while (parent) {
     ancestors.unshift(parent);
-    parent = parent.parentId === null ? undefined : tree.get(parent.parentId);
+    parent = parent.parent_id === null ? undefined : tree.get(parent.parent_id);
   }
-  const reports = focus.childIds.flatMap((id) => tree.get(id) ?? []);
+  const reports = focus.child_ids.flatMap((id) => tree.get(id) ?? []);
   return {
     type: "snapshot",
-    focusId,
+    focus_id: focusId,
     nodes: [...ancestors, focus, ...reports],
   };
 }
@@ -140,7 +140,7 @@ export function resetDirectorMockData() {
 }
 
 function notFound(id: string) {
-  return HttpResponse.json({ error: `Unknown node: ${id}` }, { status: 404 });
+  return HttpResponse.json({ detail: `Unknown node: ${id}` }, { status: 404 });
 }
 
 export const DIRECTOR_HANDLERS = [
@@ -183,7 +183,7 @@ export const DIRECTOR_HANDLERS = [
     const rule = typeof payload?.rule === "string" ? payload.rule.trim() : "";
     if (!rule) {
       return HttpResponse.json(
-        { error: "`rule` must be a non-empty string" },
+        { detail: "`rule` must be a non-empty string" },
         { status: 400 },
       );
     }

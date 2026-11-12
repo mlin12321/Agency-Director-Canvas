@@ -38,7 +38,7 @@ function reduce(state: OrgTreeState, action: OrgTreeAction): OrgTreeState {
     case "snapshot":
       return {
         status: "live",
-        focusId: event.focusId,
+        focusId: event.focus_id,
         nodes: new Map(event.nodes.map((node) => [node.id, node])),
       };
     case "node_upsert": {
@@ -88,15 +88,15 @@ export function useOrgTree(nodeId: NodeId | null): OrgTreeView {
       state.focusId === null ? null : (state.nodes.get(state.focusId) ?? null);
 
     const ancestors: OrgNode[] = [];
-    let parentId = focus?.parentId ?? null;
+    let parentId = focus?.parent_id ?? null;
     while (parentId !== null) {
       const parent = state.nodes.get(parentId);
       if (!parent) break;
       ancestors.unshift(parent);
-      parentId = parent.parentId;
+      parentId = parent.parent_id;
     }
 
-    const reports = (focus?.childIds ?? []).flatMap((childId) => {
+    const reports = (focus?.child_ids ?? []).flatMap((childId) => {
       const child = state.nodes.get(childId);
       return child ? [child] : [];
     });

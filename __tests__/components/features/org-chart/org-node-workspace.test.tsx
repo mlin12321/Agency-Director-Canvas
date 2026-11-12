@@ -14,10 +14,7 @@ import { OrgNodeWorkspace } from "#/components/features/org-chart/org-node-works
 import { useNavigation } from "#/context/navigation-context";
 import { server } from "#/mocks/node";
 import { renderWithProviders } from "test-utils";
-import {
-  OrgStore,
-  type OrgNodeInput,
-} from "../../../../director/org/org-store.mjs";
+import { OrgStore, type OrgNodeInput } from "./fake-org-store.mjs";
 
 // The real conversation view needs a live agent server. What matters here is
 // that the inspector mounts it re-targeted at the inspected agent.
@@ -29,8 +26,8 @@ vi.mock("#/routes/conversation", () => ({
 }));
 
 const POD: AgentRef[] = [
-  { role: "lead_ic", conversationId: null, status: "running" },
-  { role: "manager", conversationId: "conv-manager", status: "idle" },
+  { role: "lead_ic", conversation_id: null, status: "running" },
+  { role: "manager", conversation_id: "conv-manager", status: "idle" },
 ];
 
 function input(
@@ -41,19 +38,19 @@ function input(
 ): OrgNodeInput {
   return {
     id,
-    parentId,
+    parent_id: parentId,
     title: `${id} team`,
     boundary: { path, writable: [`${path}/**`], readonly: ["src/types/**"] },
     isolation: parentId === "auth" ? "shared" : "worktree",
-    worktreePath: ".",
+    worktree_path: ".",
     branch: `agents/${id}`,
     agents: POD,
     health,
-    specSummary: `Spec for ${id}`,
+    spec_summary: `Spec for ${id}`,
   };
 }
 
-/** The real director store drives the stream, so events are the real ones. */
+/** A fake of the server's org store drives the stream with realistic events. */
 let store: OrgStore;
 let streams: Array<{ close: () => void }>;
 let streamRequests: Request[];
@@ -69,7 +66,7 @@ function streamHandler() {
       new URL(request.url).searchParams.get("node") ?? store.rootId;
     const snapshot = focusId === null ? null : store.snapshot(focusId);
     if (!snapshot) {
-      return HttpResponse.json({ error: "Unknown node" }, { status: 404 });
+      return HttpResponse.json({ detail: "Unknown node" }, { status: 404 });
     }
     let unsubscribe = () => {};
     const handle = { close: () => {} };
@@ -411,6 +408,36 @@ describe("OrgNodeWorkspace", () => {
     expect(streamRequests).toHaveLength(1);
   });
 
+  it("treats a backend without an org tree as unavailable and keeps retrying", async () => {
+    // A stock Agent Server has no director API, and a new one has no tree yet:
+    // both answer 404 for the root.
+    let attempts = 0;
+    server.use(
+      http.get(
+        "*/api/director/org/tree-stream",
+        () => {
+          attempts += 1;
+          return HttpResponse.json({ detail: "Not Found" }, { status: 404 });
+        },
+        { once: true },
+      ),
+    );
+
+    renderWithProviders(<OrgNodeWorkspace nodeId={null} />);
+
+    expect(
+      await screen.findByText("ORG_CHART$UNAVAILABLE_TITLE"),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByRole(
+        "heading",
+        { level: 1, name: "root team" },
+        { timeout: 4000 },
+      ),
+    ).toBeInTheDocument();
+    expect(attempts).toBe(1);
+  });
+
   it("says the director is offline, then recovers by itself once it is back", async () => {
     let failures = 0;
     server.use(
@@ -418,7 +445,7 @@ describe("OrgNodeWorkspace", () => {
         "*/api/director/org/tree-stream",
         () => {
           failures += 1;
-          return HttpResponse.json({ error: "down" }, { status: 503 });
+          return HttpResponse.json({ detail: "down" }, { status: 503 });
         },
         { once: true },
       ),
@@ -592,7 +619,7 @@ describe("OrgNodeWorkspace", () => {
       blackboardHandlers();
       server.use(
         http.post("*/api/director/org/nodes/:nodeId/teach", () =>
-          HttpResponse.json({ error: "boom" }, { status: 500 }),
+          HttpResponse.json({ detail: "boom" }, { status: 500 }),
         ),
       );
       const user = userEvent.setup();
@@ -616,7 +643,7 @@ describe("OrgNodeWorkspace", () => {
     it("explains when the boundary memory cannot be read", async () => {
       server.use(
         http.get("*/api/director/org/nodes/:nodeId/blackboard", () =>
-          HttpResponse.json({ error: "No blackboard" }, { status: 503 }),
+          HttpResponse.json({ detail: "No blackboard" }, { status: 503 }),
         ),
       );
       const user = userEvent.setup();

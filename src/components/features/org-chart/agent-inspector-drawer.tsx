@@ -90,10 +90,10 @@ export function AgentInspectorDrawer({
       </div>
 
       <div className="min-h-0 flex-1">
-        {agent.conversationId ? (
+        {agent.conversation_id ? (
           <InspectedConversation
-            key={agent.conversationId}
-            conversationId={agent.conversationId}
+            key={agent.conversation_id}
+            conversationId={agent.conversation_id}
           />
         ) : (
           <p className="p-6 text-center text-sm text-muted">

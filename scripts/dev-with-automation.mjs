@@ -113,8 +113,6 @@ const DEFAULT_AUTOMATION_VERSION = SHARED_DEFAULTS.versions.automation;
 const DEFAULT_AUTOMATION_SDK_VERSION = SHARED_DEFAULTS.versions.agentServer;
 const DEFAULT_BACKEND_PORT = SHARED_DEFAULTS.ports.agentServer;
 const DEFAULT_AUTOMATION_PORT = SHARED_DEFAULTS.ports.automation;
-const DEFAULT_DIRECTOR_PORT = SHARED_DEFAULTS.ports.director;
-const DIRECTOR_SCRIPT = join(projectRoot, "director", "server.mjs");
 const DEFAULT_POSTHOG_API_KEY = SHARED_DEFAULTS.telemetry.posthogApiKey;
 const DEFAULT_POSTHOG_HOST = SHARED_DEFAULTS.telemetry.posthogHost;
 
@@ -456,9 +454,6 @@ async function buildConfig(args, env = process.env) {
   const launchFrontend = !backendOnly;
   const launchAgentServer = !frontendOnly;
   const launchAutomation = !frontendOnly;
-  // The director ships with the repository checkout only; the published
-  // package and the desktop bundle do not include it, so those stacks skip it.
-  const launchDirector = !frontendOnly && existsSync(DIRECTOR_SCRIPT);
   const isPublic = args.public;
 
   if (isPublic && frontendOnly) {
@@ -484,8 +479,6 @@ async function buildConfig(args, env = process.env) {
     parseInt(env.OH_CANVAS_SAFE_BACKEND_PORT, 10) || DEFAULT_BACKEND_PORT;
   const preferredAutomationPort =
     parseInt(env.OH_CANVAS_SAFE_AUTOMATION_PORT, 10) || DEFAULT_AUTOMATION_PORT;
-  const preferredDirectorPort =
-    parseInt(env.OH_CANVAS_SAFE_DIRECTOR_PORT, 10) || DEFAULT_DIRECTOR_PORT;
   const preferredVitePort = parseInt(env.OH_CANVAS_SAFE_VITE_PORT, 10) || 3001;
 
   // Fail fast if any preferred port for a service in this mode is already in
@@ -496,9 +489,6 @@ async function buildConfig(args, env = process.env) {
   }
   if (launchAutomation) {
     requiredPorts.push({ name: "automation", port: preferredAutomationPort });
-  }
-  if (launchDirector) {
-    requiredPorts.push({ name: "director", port: preferredDirectorPort });
   }
 
   logStep("ports", "Checking ports...");
@@ -579,7 +569,6 @@ async function buildConfig(args, env = process.env) {
     // Service ports (internal)
     agentServerPort: preferredBackendPort,
     autoBackendPort: preferredAutomationPort,
-    directorPort: preferredDirectorPort,
     vitePort,
     vscodePort,
     // Prefix the editor is served under on the ingress origin. Carried on the
@@ -616,9 +605,6 @@ async function buildConfig(args, env = process.env) {
     launchFrontend,
     launchAgentServer,
     launchAutomation,
-    launchDirector,
-    // Repository the director keeps its hidden refs in.
-    directorRepoDir: env.DIRECTOR_REPO_DIR || safeConfig.workingDir,
 
     verbose: args.verbose,
     bindHost,
@@ -840,8 +826,6 @@ async function waitForService(name, url, timeoutMs = 30000, proc = null) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 const AUTOMATION_ROUTE_PREFIX = "/api/automation";
-// Longer than the agent-server's "/api", so the ingress prefers it.
-const DIRECTOR_ROUTE_PREFIX = "/api/director";
 const AGENT_SERVER_ROUTE_PREFIXES = [
   "/api",
   "/sockets",
@@ -869,13 +853,6 @@ function getLocalServiceRoutes(config) {
     routes.push([
       AUTOMATION_ROUTE_PREFIX,
       `http://127.0.0.1:${config.autoBackendPort}`,
-    ]);
-  }
-
-  if (config.launchDirector) {
-    routes.push([
-      DIRECTOR_ROUTE_PREFIX,
-      `http://127.0.0.1:${config.directorPort}`,
     ]);
   }
 
@@ -941,9 +918,6 @@ function getRejectPrefixes(config) {
   const prefixes = [];
   if (!config.launchAutomation) {
     prefixes.push(AUTOMATION_ROUTE_PREFIX);
-  }
-  if (!config.launchDirector) {
-    prefixes.push(DIRECTOR_ROUTE_PREFIX);
   }
   if (!config.launchAgentServer) {
     for (const prefix of AGENT_SERVER_ROUTE_PREFIXES) {
@@ -1508,25 +1482,6 @@ export function buildMarsWebEnv(role, config) {
     : { MARS_WEB: "0" };
 }
 
-function startDirector(config, { onUnexpectedExit } = {}) {
-  logService("director", `Starting on port ${config.directorPort}...`, c.blue);
-
-  spawnService("director", process.execPath, [DIRECTOR_SCRIPT], {
-    cwd: projectRoot,
-    color: c.blue,
-    env: {
-      DIRECTOR_PORT: config.directorPort.toString(),
-      // Loopback only: browsers reach it through the ingress.
-      DIRECTOR_HOST: "127.0.0.1",
-      DIRECTOR_REPO_DIR: config.directorRepoDir,
-      ...(config.sessionApiKey
-        ? { DIRECTOR_SESSION_API_KEY: config.sessionApiKey }
-        : {}),
-    },
-    onUnexpectedExit,
-  });
-}
-
 function startIngress(config, { onUnexpectedExit } = {}) {
   logService("ingress", `Starting on port ${config.ingressPort}...`, c.yellow);
 
@@ -2057,16 +2012,6 @@ async function main(options = {}) {
   const automationProc = config.launchAutomation
     ? startAutomationBackend(config)
     : null;
-
-  if (config.launchDirector) {
-    // Not supervised: the director is an optional sidecar, so its failure
-    // must not stop the agent-server and frontend. The org chart reports the
-    // outage and the [director] log lines show why.
-    startDirector(config, {
-      onUnexpectedExit: (reason) =>
-        logError(`The director exited (${reason}); the org chart is offline.`),
-    });
-  }
 
   // 4. Start frontend server (Vite dev server OR static server)
   if (config.launchFrontend) {

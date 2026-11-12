@@ -1,9 +1,10 @@
 /**
- * In-memory org tree. The store owns the two derived fields on every node
- * (`childIds` and `descendantCounts`) and is the only thing that emits
- * `OrgEvent`s, so every subscriber sees one consistent tree.
+ * Test double for the Agent Server's director org tree. It derives
+ * `child_ids` and `descendant_counts` and emits the same events, scoped the
+ * same way, as `openhands.agent_server.director.org_store` in the SDK, so UI
+ * tests can drive realistic event sequences without a server.
  *
- * @import { HealthCounts, NodeHealth, NodeId, OrgEvent, OrgNode } from "../../src/api/director/types.ts"
+ * @import { HealthCounts, NodeHealth, NodeId, OrgEvent, OrgNode } from "../../../../src/api/director/types.ts"
  */
 
 /** @type {readonly NodeHealth[]} */
@@ -25,9 +26,9 @@ export function emptyHealthCounts() {
 
 /**
  * What a caller supplies; the store fills in the derived fields.
- * @typedef {Omit<OrgNode, "childIds" | "descendantCounts">} OrgNodeInput
+ * @typedef {Omit<OrgNode, "child_ids" | "descendant_counts">} OrgNodeInput
  * @typedef {(event: OrgEvent) => void} OrgListener
- * @typedef {{ event: OrgEvent, id: NodeId, parentId: NodeId | null }} Emission
+ * @typedef {{ event: OrgEvent, id: NodeId, parent_id: NodeId | null }} Emission
  */
 
 export class OrgStoreError extends Error {
@@ -69,7 +70,7 @@ export class OrgStore {
   children(id) {
     const node = this.#nodes.get(id);
     if (!node) return [];
-    return node.childIds.flatMap((childId) => {
+    return node.child_ids.flatMap((childId) => {
       const child = this.#nodes.get(childId);
       return child ? [child] : [];
     });
@@ -82,12 +83,12 @@ export class OrgStore {
   ancestors(id) {
     /** @type {OrgNode[]} */
     const chain = [];
-    let parentId = this.#nodes.get(id)?.parentId ?? null;
-    while (parentId !== null) {
-      const parent = this.#nodes.get(parentId);
+    let parent_id = this.#nodes.get(id)?.parent_id ?? null;
+    while (parent_id !== null) {
+      const parent = this.#nodes.get(parent_id);
       if (!parent) break;
       chain.unshift(parent);
-      parentId = parent.parentId;
+      parent_id = parent.parent_id;
     }
     return chain;
   }
@@ -101,7 +102,7 @@ export class OrgStore {
       const node = this.#nodes.get(queue[index]);
       if (node) {
         ordered.push(node);
-        queue.push(...node.childIds);
+        queue.push(...node.child_ids);
       }
     }
     return ordered;
@@ -117,49 +118,49 @@ export class OrgStore {
   upsert(input) {
     const existing = this.#nodes.get(input.id);
     if (existing) {
-      if (existing.parentId !== input.parentId) {
+      if (existing.parent_id !== input.parent_id) {
         throw new OrgStoreError(
-          `Node ${input.id} cannot change parent from ${existing.parentId} to ${input.parentId}`,
+          `Node ${input.id} cannot change parent from ${existing.parent_id} to ${input.parent_id}`,
         );
       }
-    } else if (input.parentId === null) {
+    } else if (input.parent_id === null) {
       if (this.#rootId !== null) {
         throw new OrgStoreError(
           `The tree already has a root (${this.#rootId}); ${input.id} needs a parent`,
         );
       }
-    } else if (!this.#nodes.has(input.parentId)) {
+    } else if (!this.#nodes.has(input.parent_id)) {
       throw new OrgStoreError(
-        `Parent ${input.parentId} of node ${input.id} does not exist`,
+        `Parent ${input.parent_id} of node ${input.id} does not exist`,
       );
     }
 
     /** @type {OrgNode} */
     const node = {
       ...structuredClone(input),
-      childIds: existing ? existing.childIds : [],
-      descendantCounts: existing
-        ? existing.descendantCounts
+      child_ids: existing ? existing.child_ids : [],
+      descendant_counts: existing
+        ? existing.descendant_counts
         : emptyHealthCounts(),
     };
     this.#nodes.set(node.id, node);
 
     if (!existing) {
-      if (node.parentId === null) {
+      if (node.parent_id === null) {
         this.#rootId = node.id;
       } else {
-        const parent = /** @type {OrgNode} */ (this.#nodes.get(node.parentId));
+        const parent = /** @type {OrgNode} */ (this.#nodes.get(node.parent_id));
         this.#nodes.set(parent.id, {
           ...parent,
-          childIds: [...parent.childIds, node.id],
+          child_ids: [...parent.child_ids, node.id],
         });
       }
     }
 
-    this.#emit({ type: "node_upsert", node }, node.id, node.parentId);
-    // A new child changes its parent's `childIds`, so the parent is always
+    this.#emit({ type: "node_upsert", node }, node.id, node.parent_id);
+    // A new child changes its parent's `child_ids`, so the parent is always
     // re-announced on insert; above that, only changed rollups are.
-    this.#refreshAncestors(node.parentId, !existing);
+    this.#refreshAncestors(node.parent_id, !existing);
     return node;
   }
 
@@ -184,86 +185,30 @@ export class OrgStore {
     // Leaves first, so a subscriber never holds a child of a missing parent.
     doomed.reverse();
 
-    if (node.parentId === null) {
+    if (node.parent_id === null) {
       this.#rootId = null;
     } else {
-      const parent = this.#nodes.get(node.parentId);
+      const parent = this.#nodes.get(node.parent_id);
       if (parent) {
         this.#nodes.set(parent.id, {
           ...parent,
-          childIds: parent.childIds.filter((childId) => childId !== id),
+          child_ids: parent.child_ids.filter((childId) => childId !== id),
         });
       }
     }
     // Announce while the doomed nodes are still resolvable, so a subscriber
     // focused inside the removed subtree can still be matched.
     doomed.forEach((gone) => {
-      this.#emit({ type: "node_removed", id: gone.id }, gone.id, gone.parentId);
+      this.#emit(
+        { type: "node_removed", id: gone.id },
+        gone.id,
+        gone.parent_id,
+      );
     });
     doomed.forEach((gone) => this.#nodes.delete(gone.id));
 
-    this.#refreshAncestors(node.parentId, true);
+    this.#refreshAncestors(node.parent_id, true);
     return true;
-  }
-
-  /**
-   * Replace the whole tree without emitting events. Used when loading
-   * persisted state or a fixture. Leaves the store untouched if the input
-   * is not one well-formed tree.
-   *
-   * @param {OrgNodeInput[]} inputs In any order.
-   */
-  replaceAll(inputs) {
-    /** @type {Map<NodeId, OrgNode>} */
-    const nodes = new Map();
-    inputs.forEach((input) => {
-      if (nodes.has(input.id)) {
-        throw new OrgStoreError(`Duplicate node id ${input.id}`);
-      }
-      nodes.set(input.id, {
-        ...structuredClone(input),
-        childIds: [],
-        descendantCounts: emptyHealthCounts(),
-      });
-    });
-
-    /** @type {NodeId | null} */
-    let rootId = null;
-    nodes.forEach((node) => {
-      if (node.parentId === null) {
-        if (rootId !== null) {
-          throw new OrgStoreError(
-            `More than one root node (${rootId}, ${node.id})`,
-          );
-        }
-        rootId = node.id;
-        return;
-      }
-      const parent = nodes.get(node.parentId);
-      if (!parent) {
-        throw new OrgStoreError(
-          `Parent ${node.parentId} of node ${node.id} does not exist`,
-        );
-      }
-      parent.childIds.push(node.id);
-    });
-    if (nodes.size > 0 && rootId === null) {
-      throw new OrgStoreError("The tree has no root node");
-    }
-
-    const previous = { nodes: this.#nodes, rootId: this.#rootId };
-    this.#nodes = nodes;
-    this.#rootId = rootId;
-
-    const ordered = this.all();
-    if (ordered.length !== nodes.size) {
-      this.#nodes = previous.nodes;
-      this.#rootId = previous.rootId;
-      throw new OrgStoreError("The tree contains a cycle");
-    }
-    for (let index = ordered.length - 1; index >= 0; index -= 1) {
-      ordered[index].descendantCounts = this.#rollup(ordered[index]);
-    }
   }
 
   /**
@@ -277,7 +222,7 @@ export class OrgStore {
     if (!focus) return null;
     return {
       type: "snapshot",
-      focusId,
+      focus_id: focusId,
       nodes: [...this.ancestors(focusId), focus, ...this.children(focusId)],
     };
   }
@@ -292,7 +237,7 @@ export class OrgStore {
   subscribe(focusId, listener) {
     /** @param {Emission} emission */
     const filtered = (emission) => {
-      if (this.#isVisibleFrom(focusId, emission.id, emission.parentId)) {
+      if (this.#isVisibleFrom(focusId, emission.id, emission.parent_id)) {
         listener(emission.event);
       }
     };
@@ -305,10 +250,10 @@ export class OrgStore {
   /**
    * @param {NodeId} focusId
    * @param {NodeId} id
-   * @param {NodeId | null} parentId
+   * @param {NodeId | null} parent_id
    */
-  #isVisibleFrom(focusId, id, parentId) {
-    if (id === focusId || parentId === focusId) return true;
+  #isVisibleFrom(focusId, id, parent_id) {
+    if (id === focusId || parent_id === focusId) return true;
     return this.ancestors(focusId).some((ancestor) => ancestor.id === id);
   }
 
@@ -318,7 +263,7 @@ export class OrgStore {
     this.children(node.id).forEach((child) => {
       counts[child.health] += 1;
       NODE_HEALTHS.forEach((health) => {
-        counts[health] += child.descendantCounts[health];
+        counts[health] += child.descendant_counts[health];
       });
     });
     return counts;
@@ -338,31 +283,31 @@ export class OrgStore {
       const current = this.#nodes.get(currentId);
       if (!current) return;
       const counts = this.#rollup(current);
-      const changed = !sameCounts(counts, current.descendantCounts);
+      const changed = !sameCounts(counts, current.descendant_counts);
       const announced = changed
-        ? { ...current, descendantCounts: counts }
+        ? { ...current, descendant_counts: counts }
         : current;
       if (changed) this.#nodes.set(announced.id, announced);
       if (changed || (first && alwaysAnnounceFirst)) {
         this.#emit(
           { type: "node_upsert", node: announced },
           announced.id,
-          announced.parentId,
+          announced.parent_id,
         );
       }
       first = false;
-      currentId = current.parentId;
+      currentId = current.parent_id;
     }
   }
 
   /**
    * @param {OrgEvent} event
    * @param {NodeId} id
-   * @param {NodeId | null} parentId
+   * @param {NodeId | null} parent_id
    */
-  #emit(event, id, parentId) {
+  #emit(event, id, parent_id) {
     [...this.#listeners].forEach((listener) =>
-      listener({ event, id, parentId }),
+      listener({ event, id, parent_id }),
     );
   }
 }

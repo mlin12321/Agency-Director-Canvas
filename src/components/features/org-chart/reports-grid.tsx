@@ -53,7 +53,7 @@ export function ReportsGrid({ reports, compact = false }: ReportsGridProps) {
               )}
             >
               {group.map(({ node, index }) => {
-                const subTeams = node.childIds.length;
+                const subTeams = node.child_ids.length;
                 return (
                   <li key={node.id}>
                     <NavigationLink
@@ -74,7 +74,7 @@ export function ReportsGrid({ reports, compact = false }: ReportsGridProps) {
                         </span>
                       </span>
                       <span className="line-clamp-2 text-xs text-text-secondary">
-                        {node.specSummary}
+                        {node.spec_summary}
                       </span>
                       {subTeams > 0 ? (
                         <span className="text-xs text-muted">

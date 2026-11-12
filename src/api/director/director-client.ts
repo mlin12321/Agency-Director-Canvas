@@ -22,7 +22,7 @@ export class DirectorError extends Error {
   }
 }
 
-/** The director only exists next to a local backend; there is none on Cloud. */
+/** The director API is served by a local Agent Server; Cloud has none. */
 function resolveDirector() {
   const backend = getEffectiveLocalBackend();
   if (!backend) {
@@ -52,7 +52,7 @@ async function requestJson<T>(path: string, init: RequestInit = {}) {
   if (!response.ok) {
     const body = await response.json().catch(() => null);
     throw new DirectorError(
-      typeof body?.error === "string" ? body.error : response.statusText,
+      typeof body?.detail === "string" ? body.detail : response.statusText,
       response.status,
     );
   }
@@ -79,7 +79,7 @@ export type OrgStreamStatus =
   | "live"
   /** Was live, lost the connection, retrying. */
   | "reconnecting"
-  /** The director cannot be reached at all; still retrying. */
+  /** The backend cannot be reached or has no org tree; still retrying. */
   | "unavailable"
   /** The requested node does not exist. Not retried. */
   | "not_found";
@@ -162,7 +162,14 @@ export function subscribeOrgTree(
   const run = () => {
     connect().catch((error: unknown) => {
       if (controller.signal.aborted) return;
-      if (error instanceof DirectorError && error.status === 404) {
+      // A 404 for a named node means the node is gone. A 404 for the root
+      // means this backend has no org tree (yet), or no director API at all,
+      // which is worth retrying.
+      if (
+        nodeId !== null &&
+        error instanceof DirectorError &&
+        error.status === 404
+      ) {
         onStatus("not_found");
         return;
       }

@@ -1,7 +1,7 @@
 /**
- * Wire contract between the director service (`director/`) and the org-chart
- * UI. The director's `.mjs` modules reference these types through JSDoc, so
- * this file is the single definition of every shape that crosses the wire.
+ * The Agent Server's director API, as the org-chart UI consumes it. The
+ * contract is defined by the server (`openhands.agent_server.director.models`
+ * in the SDK); these types mirror it and must not add to it.
  */
 
 export type NodeId = string;
@@ -30,7 +30,7 @@ export interface Boundary {
 export interface AgentRef {
   role: AgentRole;
   /** `null` until the director has started a conversation for this agent. */
-  conversationId: string | null;
+  conversation_id: string | null;
   status: string;
 }
 
@@ -38,42 +38,28 @@ export type HealthCounts = Record<NodeHealth, number>;
 
 export interface OrgNode {
   id: NodeId;
-  parentId: NodeId | null;
-  childIds: NodeId[];
+  parent_id: NodeId | null;
+  child_ids: NodeId[];
   title: string;
   boundary: Boundary;
   isolation: IsolationMode;
-  worktreePath: string;
+  worktree_path: string;
   branch: string;
   agents: AgentRef[];
   health: NodeHealth;
-  specSummary: string;
+  spec_summary: string;
   /**
    * Health of every node below this one, so a parent can summarize its whole
    * subtree without the client loading it.
    */
-  descendantCounts: HealthCounts;
-}
-
-export interface SpawnProposalChild {
-  title: string;
-  boundary: Boundary;
-  isolation: IsolationMode;
-  task: string;
-}
-
-export interface SpawnProposal {
-  nodeId: NodeId;
-  rationale: string;
-  contracts: string;
-  children: SpawnProposalChild[];
+  descendant_counts: HealthCounts;
 }
 
 export interface Autopsy {
-  nodeId: NodeId;
+  node_id: NodeId;
   at: string;
   approach: string;
-  whyFailed: string;
+  why_failed: string;
 }
 
 export interface BoundaryMemory {
@@ -98,9 +84,8 @@ export interface NodeBlackboard {
  * its direct reports. Later events are limited to that same set.
  */
 export type OrgEvent =
-  | { type: "snapshot"; focusId: NodeId; nodes: OrgNode[] }
+  | { type: "snapshot"; focus_id: NodeId; nodes: OrgNode[] }
   | { type: "node_upsert"; node: OrgNode }
-  | { type: "node_removed"; id: NodeId }
-  | { type: "collision"; nodeIds: NodeId[]; paths: string[] };
+  | { type: "node_removed"; id: NodeId };
 
 export const DIRECTOR_BASE_PATH = "/api/director";

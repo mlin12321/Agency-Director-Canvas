@@ -20,15 +20,7 @@ import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import {
-  afterAll,
-  afterEach,
-  beforeAll,
-  describe,
-  expect,
-  it,
-  vi,
-} from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { server as mswServer } from "#/mocks/node";
 import {
   buildAgentServerAutomationEnv,
@@ -1440,7 +1432,7 @@ describe("dev-with-automation CLI", () => {
       { mode: 0o755 },
     );
     const ports: number[] = [];
-    for (let i = 0; i < 4; i += 1) {
+    for (let i = 0; i < 3; i += 1) {
       const server = net.createServer();
       await new Promise<void>((resolve) =>
         server.listen(0, "127.0.0.1", resolve),
@@ -1448,7 +1440,7 @@ describe("dev-with-automation CLI", () => {
       ports.push((server.address() as net.AddressInfo).port);
       await new Promise((resolve) => server.close(resolve));
     }
-    const [ingressPort, agentServerPort, automationPort, directorPort] = ports;
+    const [ingressPort, agentServerPort, automationPort] = ports;
     const launcherScript = path.join(dir, "launch.mjs");
     writeFileSync(
       launcherScript,
@@ -1475,7 +1467,6 @@ describe("dev-with-automation CLI", () => {
           OH_CANVAS_SAFE_STATE_DIR: path.join(dir, "state"),
           OH_CANVAS_SAFE_BACKEND_PORT: String(agentServerPort),
           OH_CANVAS_SAFE_AUTOMATION_PORT: String(automationPort),
-          OH_CANVAS_SAFE_DIRECTOR_PORT: String(directorPort),
           OH_AUTOMATION_LOCAL_PATH: checkout,
         },
         stdio: ["ignore", "pipe", "pipe"],
@@ -1555,49 +1546,6 @@ describe("dev-with-automation CLI", () => {
       }
     },
     30_000,
-  );
-
-  it.skipIf(process.platform === "win32")(
-    "serves the director through the ingress, guarded by the stack's session key",
-    async () => {
-      const stack = await launchBackendOnly(
-        [
-          'import http from "node:http";',
-          'const port = Number(process.argv[process.argv.indexOf("--port") + 1]);',
-          "http",
-          '  .createServer((_req, res) => res.writeHead(200).end(\'{"status":"ok"}\'))',
-          '  .listen(port, "127.0.0.1");',
-        ].join("\n"),
-      );
-      try {
-        expect(
-          await stack.waitForOutput("LAUNCHED", 20_000),
-          stack.output(),
-        ).toBe(true);
-        const origin = `http://127.0.0.1:${stack.ingressPort}`;
-
-        // The director can still be booting when the banner prints.
-        let health: Response | null = null;
-        const deadline = Date.now() + 10_000;
-        while (Date.now() < deadline) {
-          health = await fetch(`${origin}/api/director/health`).catch(
-            () => null,
-          );
-          if (health?.ok) break;
-          await delay(100);
-        }
-        const node = await fetch(`${origin}/api/director/org/nodes/root`);
-
-        // The stubbed agent-server answers every path with `{}`, so these
-        // bodies can only have come from the director.
-        expect(health?.status, stack.output()).toBe(200);
-        expect(await health?.json()).toEqual({ status: "ok", nodes: 0 });
-        expect(node.status).toBe(401);
-      } finally {
-        await stack.stop();
-      }
-    },
-    45_000,
   );
 
   it.skipIf(process.platform === "win32")(

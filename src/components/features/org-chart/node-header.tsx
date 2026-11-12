@@ -12,7 +12,7 @@ interface NodeHeaderProps {
 export function NodeHeader({ node, onInspectAgent }: NodeHeaderProps) {
   const { t } = useTranslation("openhands");
   const below = HEALTH_ORDER.filter(
-    (health) => node.descendantCounts[health] > 0,
+    (health) => node.descendant_counts[health] > 0,
   );
 
   return (
@@ -21,8 +21,8 @@ export function NodeHeader({ node, onInspectAgent }: NodeHeaderProps) {
         <h1 className="text-lg font-semibold text-contrast">{node.title}</h1>
         <HealthBadge health={node.health} />
       </div>
-      {node.specSummary ? (
-        <p className="text-sm text-text-secondary">{node.specSummary}</p>
+      {node.spec_summary ? (
+        <p className="text-sm text-text-secondary">{node.spec_summary}</p>
       ) : null}
 
       <section
@@ -54,7 +54,7 @@ export function NodeHeader({ node, onInspectAgent }: NodeHeaderProps) {
             <HealthBadge
               key={health}
               health={health}
-              count={node.descendantCounts[health]}
+              count={node.descendant_counts[health]}
             />
           ))}
         </section>
