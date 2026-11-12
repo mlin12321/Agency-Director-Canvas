@@ -743,6 +743,8 @@ test("--lock-to-cloud takes P+4, keeps it across a restart, and needs an http(s)
   assert.match(help.stdout, /--mars-web/);
   assert.match(help.stdout, /MARS_WEB=1/);
   assert.match(help.stdout, /--lock-to-cloud URL/);
+  assert.match(help.stdout, /--director-fixture/);
+  assert.match(help.stdout, /OH_DIRECTOR_FIXTURE=1/);
 });
 
 test("a restart follows the launcher's editor answer, or keeps its ports", () => {

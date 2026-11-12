@@ -725,6 +725,13 @@ async function cmdLaunch({ flags }) {
   // The ingress hosts the DigitalOcean Managed Agents web bridge (/mars/*)
   // only with exactly MARS_WEB=1 (OpenHands/OpenHands#18783).
   if (flags["mars-web"]) env.MARS_WEB = "1";
+  // The Agent Server serves its built-in 487-node org tree, which the org
+  // chart needs until agents can build a real one. Its blackboard lives in
+  // the repository `fixture git-repo` creates, once that exists.
+  if (flags["director-fixture"]) {
+    env.OH_DIRECTOR_FIXTURE = "1";
+    env.OH_DIRECTOR_REPO_PATH = join(dir, "workspace", "qa-repo");
+  }
   // Only PASS_ENV and the flags above reach the launcher, so a version pin
   // exported in the caller's shell would be dropped without a word.
   const ignoredEnv = Object.keys(process.env).filter(
@@ -808,7 +815,7 @@ async function cmdLaunch({ flags }) {
     pins: defaults().versions,
     overrides: Object.fromEntries(
       Object.entries(env).filter(([k]) =>
-        /^(OH_(AGENT_SERVER_|AUTOMATION_|CANVAS_ENABLE_VSCODE$)|MARS_WEB$)/.test(
+        /^(OH_(AGENT_SERVER_|AUTOMATION_|CANVAS_ENABLE_VSCODE$|DIRECTOR_)|MARS_WEB$)/.test(
           k,
         ),
       ),
@@ -4852,7 +4859,7 @@ Examples:
   launch: `control-openhands launch [--public] [--new] [--print-run] [--port N | --port-from N] [--build auto|always|never] [--min-free-mb 2000]
                          [--no-browser] [--timeout SEC] [--sdk-path DIR | --sdk-ref REF | --sdk-version V]
                          [--automation-path DIR | --automation-ref REF | --automation-version V] [--run-id ID] [--vscode]
-                         [--mars-web] [--lock-to-cloud URL]
+                         [--mars-web] [--lock-to-cloud URL] [--director-fixture]
 
 Builds the checkout when build/verify-revision.txt does not match HEAD, then
 starts bin/agent-canvas.mjs with a private HOME, state dir, session key and
@@ -4866,6 +4873,11 @@ SPA, then starts the browser daemon.
 --mars-web starts the launcher with MARS_WEB=1, so the run's ingress hosts the
 DigitalOcean Managed Agents web bridge (/mars/*) and Add Backend offers the
 Providers tab; doctor checks /mars/health.
+--director-fixture starts the Agent Server with OH_DIRECTOR_FIXTURE=1, so
+/org shows its built-in 487-node org tree. Without it the tree is empty and
+/org shows its unavailable state. Boundary memory is stored in the run's
+qa-repo and is unavailable until "fixture git-repo" creates it. Needs an Agent
+Server with the director API (--sdk-path to such a checkout).
 --lock-to-cloud URL also serves this build locked to that OpenHands Cloud host
 (scripts/static-server.mjs --lock-to-cloud; bin/agent-canvas.mjs has no such
 option) on P+4, listed as ports.lockedCloud and lockedCloud.url. The locked page
