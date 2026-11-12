@@ -10,7 +10,7 @@ import { cn } from "#/utils/utils";
 import { AgentInspectorDrawer } from "./agent-inspector-drawer";
 import { ChartToolbar } from "./chart-toolbar";
 import { EscalationsPanel } from "./escalations-panel";
-import { FocusedChart } from "./focused-chart";
+import { FocusedChart, fitFocusedChart } from "./focused-chart";
 import { OrgBreadcrumb } from "./org-breadcrumb";
 import { OrgTree } from "./org-tree";
 
@@ -47,6 +47,9 @@ function ancestorsOf(node: OrgNode, nodes: ReadonlyMap<NodeId, OrgNode>) {
   return ancestors;
 }
 
+/** Kept free on each axis around one team's chart: the padding and more. */
+const CHART_MARGIN = 96;
+
 /**
  * An org chart of agent teams. It is on one team at a time and draws either
  * that team with its direct reports, or the whole org with that team in the
@@ -65,6 +68,24 @@ export function OrgChartView({ nodeId }: OrgChartViewProps) {
   // Details belong to the team they were opened on.
   const [detailsId, setDetailsId] = React.useState<NodeId | null>(null);
   const closeDetails = React.useCallback(() => setDetailsId(null), []);
+  // The room the chart has, less the space kept free around what is drawn.
+  const [frame, setFrame] = React.useState<HTMLElement | null>(null);
+  const [space, setSpace] = React.useState({ width: 0, height: 0 });
+  React.useLayoutEffect(() => {
+    if (!frame) return undefined;
+    const measure = () =>
+      setSpace((previous) => {
+        const width = frame.clientWidth - CHART_MARGIN;
+        const height = frame.clientHeight - CHART_MARGIN;
+        return previous.width === width && previous.height === height
+          ? previous
+          : { width, height };
+      });
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(frame);
+    return () => observer.disconnect();
+  }, [frame]);
   const titleOf = React.useCallback(
     (id: NodeId) => nodes.get(id)?.title ?? id,
     [nodes],
@@ -102,6 +123,19 @@ export function OrgChartView({ nodeId }: OrgChartViewProps) {
   const ancestors = ancestorsOf(current, nodes);
   const stale = status === "reconnecting" || status === "unavailable";
   const openDetails = () => setDetailsId(current.id);
+  const reports = current.child_ids.flatMap((id) => nodes.get(id) ?? []);
+  // One team is drawn at its normal size and shrunk only when it would not
+  // fit. The whole org is never fitted: it scrolls.
+  const fit = full
+    ? { columns: 1, scale: 1 }
+    : fitFocusedChart(
+        {
+          reports: reports.length,
+          hasParent: ancestors.length > 0,
+          hasSubTeams: reports.some((report) => report.child_ids.length > 0),
+        },
+        space,
+      );
 
   return (
     <div data-testid="org-chart" className="flex h-full min-h-0">
@@ -119,22 +153,25 @@ export function OrgChartView({ nodeId }: OrgChartViewProps) {
         </div>
         <EscalationsPanel escalations={escalations} />
         <section
+          ref={setFrame}
           aria-label={t(I18nKey.ORG_CHART$NAV)}
           className="min-h-0 flex-1 overflow-auto rounded-xl border border-border"
         >
-          {/* One team fills the chart. The whole org sits in the middle of
-              it. Either scrolls once it is larger than the chart. */}
+          {/* Whatever is drawn sits in the middle of the chart, both ways,
+              with room around it, and scrolls once it is larger. */}
           <div
             className={
               full
                 ? "flex min-h-full w-max min-w-full items-center justify-center p-6"
-                : "flex min-h-full w-full p-4"
+                : "flex min-h-full w-full items-center justify-center p-6"
             }
           >
             <div
               data-testid="org-chart-zoom"
-              style={{ "--org-chart-zoom": zoom } as React.CSSProperties}
-              className={cn("org-chart-zoom", full || "flex w-full")}
+              style={
+                { "--org-chart-zoom": zoom * fit.scale } as React.CSSProperties
+              }
+              className={cn("org-chart-zoom", full || "w-full")}
             >
               {full ? (
                 <OrgTree
@@ -148,9 +185,8 @@ export function OrgChartView({ nodeId }: OrgChartViewProps) {
                 <FocusedChart
                   current={current}
                   parent={ancestors.at(-1) ?? null}
-                  reports={current.child_ids.flatMap(
-                    (id) => nodes.get(id) ?? [],
-                  )}
+                  reports={reports}
+                  columns={fit.columns}
                   titleOf={titleOf}
                   onOpenDetails={openDetails}
                 />

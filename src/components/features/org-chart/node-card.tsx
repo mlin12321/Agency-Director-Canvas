@@ -18,12 +18,12 @@ interface NodeCardProps {
   onOpenDetails: () => void;
   /** Bring the current team to the middle of a chart that scrolls. */
   centerInScroller?: boolean;
-  /** Take all the room the chart gives the card, instead of a fixed width. */
-  fill?: boolean;
 }
 
+// Every card is the same size wherever it is drawn. A chart that does not
+// fit is scaled as a whole; cards are never resized one by one.
 const MAIN_CLASS =
-  "flex size-full flex-col justify-center gap-1 rounded-lg p-2 hover:bg-surface-raised";
+  "flex size-full flex-col items-start justify-center gap-0.5 rounded-lg px-2 text-left hover:bg-surface-raised";
 
 /**
  * One team. Clicking it moves the page to that team; clicking the team the
@@ -35,7 +35,6 @@ export function NodeCard({
   titleOf,
   onOpenDetails,
   centerInScroller = false,
-  fill = false,
 }: NodeCardProps) {
   const { t } = useTranslation("openhands");
   const ref = React.useRef<HTMLDivElement>(null);
@@ -61,20 +60,10 @@ export function NodeCard({
     onScreen.current = true;
   }, [zoom]);
 
-  const mainClass = cn(
-    MAIN_CLASS,
-    fill ? "items-center text-center" : "items-start text-left",
-  );
   const body = (
     <>
-      <span className="flex max-w-full items-start gap-1.5">
-        {/* Long names wrap: a card may grow taller, never wider. */}
-        <span
-          className={cn(
-            "min-w-0 break-words font-medium text-contrast",
-            fill ? "text-base" : "flex-1 text-sm",
-          )}
-        >
+      <span className="flex w-full items-center gap-1.5">
+        <span className="min-w-0 flex-1 truncate text-sm font-medium text-contrast">
           {node.title}
         </span>
         {node.escalation_count > 0 ? (
@@ -83,7 +72,7 @@ export function NodeCard({
             aria-label={t(I18nKey.ORG_CHART$ESCALATION_COUNT, {
               count: node.escalation_count,
             })}
-            className="flex shrink-0 items-center gap-0.5 pt-0.5 text-xs font-medium text-feedback-error"
+            className="flex shrink-0 items-center gap-0.5 text-xs font-medium text-feedback-error"
           >
             <TriangleAlert width={12} height={12} aria-hidden="true" />
             {node.escalation_count}
@@ -104,8 +93,7 @@ export function NodeCard({
       data-testid={`org-node-${node.id}`}
       data-current={current || undefined}
       className={cn(
-        "rounded-lg border bg-surface",
-        fill ? "size-full" : "w-40",
+        "h-14 w-40 rounded-lg border bg-surface",
         current ? "border-primary ring-1 ring-primary" : "border-border",
       )}
     >
@@ -122,12 +110,12 @@ export function NodeCard({
               title: node.title,
             })}
             onClick={onOpenDetails}
-            className={mainClass}
+            className={MAIN_CLASS}
           >
             {body}
           </button>
         ) : (
-          <NavigationLink to={orgNodePath(node.id)} className={mainClass}>
+          <NavigationLink to={orgNodePath(node.id)} className={MAIN_CLASS}>
             {body}
           </NavigationLink>
         )}

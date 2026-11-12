@@ -28,7 +28,7 @@ vi.mock("#/routes/conversation", () => ({
 }));
 
 const POD: AgentRef[] = [
-  { role: "lead_ic", conversation_id: null, status: "running" },
+  { role: "ic", conversation_id: null, status: "running" },
   { role: "manager", conversation_id: "conv-manager", status: "idle" },
 ];
 
@@ -433,7 +433,7 @@ describe("OrgChartView", () => {
       expect(within(tip).getByText("src/types/**")).toBeInTheDocument();
       expect(
         within(tip).getByText(
-          "ORG_CHART$ROLE_LEAD_IC (running), ORG_CHART$ROLE_MANAGER (idle)",
+          "ORG_CHART$ROLE_IC (running), ORG_CHART$ROLE_MANAGER (idle)",
         ),
       ).toBeInTheDocument();
       // What the team sent up, and that a team above still has it.
@@ -905,7 +905,7 @@ describe("OrgChartView", () => {
       const drawer = screen.getByRole("dialog", { name: "auth team" });
       expect(
         within(drawer).getByRole("button", {
-          name: /ORG_CHART\$ROLE_LEAD_IC/,
+          name: /ORG_CHART\$ROLE_IC/,
         }),
       ).toHaveAttribute("aria-pressed", "true");
       expect(

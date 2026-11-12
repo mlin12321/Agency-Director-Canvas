@@ -23,9 +23,8 @@ const BASE = `*${DIRECTOR_BASE_PATH}`;
 const ROOT_ID = "root";
 
 const POD: AgentRef[] = [
-  { role: "lead_ic", conversation_id: null, status: "running" },
+  { role: "ic", conversation_id: null, status: "running" },
   { role: "manager", conversation_id: null, status: "idle" },
-  { role: "reviewer", conversation_id: null, status: "idle" },
 ];
 
 const DOMAINS: Array<{ name: string; health: NodeHealth }> = [

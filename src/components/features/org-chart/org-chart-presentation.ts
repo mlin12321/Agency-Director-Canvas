@@ -25,10 +25,8 @@ export const HEALTH_DOT_CLASSES: Record<NodeHealth, string> = {
 };
 
 export const ROLE_LABEL_KEYS: Record<AgentRole, I18nKey> = {
-  lead_ic: I18nKey.ORG_CHART$ROLE_LEAD_IC,
+  ic: I18nKey.ORG_CHART$ROLE_IC,
   manager: I18nKey.ORG_CHART$ROLE_MANAGER,
-  reviewer: I18nKey.ORG_CHART$ROLE_REVIEWER,
-  worker: I18nKey.ORG_CHART$ROLE_WORKER,
 };
 
 export const ISOLATION_LABEL_KEYS: Record<IsolationMode, I18nKey> = {
