@@ -1,6 +1,8 @@
 import { CircleHelp, TriangleAlert } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { OpenEscalation } from "#/api/director/types";
+import { NavigationLink } from "#/components/shared/navigation-link";
+import { orgNodePath } from "#/constants/org-chart";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
 import { ESCALATION_LABEL_KEYS } from "./org-chart-presentation";
@@ -8,18 +10,14 @@ import { ESCALATION_LABEL_KEYS } from "./org-chart-presentation";
 interface EscalationsPanelProps {
   /** In the server's order: critical issues first, then longest waiting. */
   escalations: OpenEscalation[];
-  /** Show the team that raised it in the chart. */
-  onReveal: (escalation: OpenEscalation) => void;
 }
 
 /**
- * The only work the chart puts in front of the human: what teams could not
- * settle themselves, each with the chain of teams it came up through.
+ * The only work the chart puts in front of the human: what no team on the
+ * way up could settle. Each entry says where it came from and why each team
+ * above passed it on, and leads to the team that raised it.
  */
-export function EscalationsPanel({
-  escalations,
-  onReveal,
-}: EscalationsPanelProps) {
+export function EscalationsPanel({ escalations }: EscalationsPanelProps) {
   const { t } = useTranslation("openhands");
   const title = t(I18nKey.ORG_CHART$ESCALATIONS);
 
@@ -43,14 +41,16 @@ export function EscalationsPanel({
             const { escalation } = item;
             const critical = escalation.kind === "critical_issue";
             const Icon = critical ? TriangleAlert : CircleHelp;
+            const titles = new Map(
+              item.path.map((step) => [step.id, step.title]),
+            );
             return (
               <li
                 key={`${item.node_id}/${escalation.id}`}
                 className="min-w-64 flex-1"
               >
-                <button
-                  type="button"
-                  onClick={() => onReveal(item)}
+                <NavigationLink
+                  to={orgNodePath(item.node_id)}
                   className="flex h-full w-full flex-col items-start gap-1 rounded-lg border border-border bg-surface p-2.5 text-left hover:bg-surface-raised"
                 >
                   <span
@@ -66,14 +66,30 @@ export function EscalationsPanel({
                     {escalation.title}
                   </span>
                   {escalation.detail ? (
-                    <span className="line-clamp-2 text-xs text-text-secondary">
+                    <span className="text-xs text-text-secondary">
                       {escalation.detail}
                     </span>
                   ) : null}
                   <span className="text-xs text-muted">
                     {item.path.map((step) => step.title).join(" › ")}
                   </span>
-                </button>
+                  {escalation.handoffs.length > 0 ? (
+                    <span className="flex flex-col gap-0.5 border-t border-border pt-1 text-xs text-text-secondary">
+                      <span className="text-muted">
+                        {t(I18nKey.ORG_CHART$ESCALATION_PASSED_UP)}
+                      </span>
+                      {escalation.handoffs.map((handoff) => (
+                        <span key={handoff.node_id}>
+                          <span className="text-contrast">
+                            {titles.get(handoff.node_id) ?? handoff.node_id}
+                          </span>
+                          {": "}
+                          {handoff.reason}
+                        </span>
+                      ))}
+                    </span>
+                  ) : null}
+                </NavigationLink>
               </li>
             );
           })}

@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -14,6 +14,7 @@ import * as activeStore from "#/api/backend-registry/active-store";
 import { OrgChartView } from "#/components/features/org-chart/org-chart-view";
 import { useNavigation } from "#/context/navigation-context";
 import { server } from "#/mocks/node";
+import { useOrgChartStore } from "#/stores/org-chart-store";
 import { renderWithProviders } from "test-utils";
 import { OrgStore, type OrgNodeInput } from "./fake-org-store.mjs";
 
@@ -53,19 +54,31 @@ function input(
   };
 }
 
+/** Still with the team above the one that raised it. */
 const TOKEN_DECISION: Escalation = {
   id: "token-format",
   kind: "design_decision",
   title: "Pick a token format",
   detail: "JWT or opaque?",
   raised_at: "2026-11-10T00:00:00Z",
+  held_by: "auth",
+  handoffs: [],
 };
+/** Passed up by every team above billing, so it waits on the human. */
 const DOUBLE_CHARGE: Escalation = {
   id: "double-charge",
   kind: "critical_issue",
   title: "Retries charge twice",
   detail: "",
   raised_at: "2026-11-11T00:00:00Z",
+  held_by: null,
+  handoffs: [
+    {
+      node_id: "root",
+      reason: "Refunds need a person",
+      at: "2026-11-11T01:00:00Z",
+    },
+  ],
 };
 
 /** A fake of the server's org store drives the stream with realistic events. */
@@ -82,9 +95,8 @@ function streamHandler() {
     streamRequests.push(request);
     const params = new URL(request.url).searchParams;
     const focusId = params.get("node") ?? store.rootId;
-    const expanded = params.getAll("expanded");
-    const snapshot =
-      focusId === null ? null : store.snapshot(focusId, expanded);
+    const full = params.get("full") === "true";
+    const snapshot = focusId === null ? null : store.snapshot(focusId, full);
     if (!snapshot) {
       return HttpResponse.json({ detail: "Unknown node" }, { status: 404 });
     }
@@ -98,7 +110,7 @@ function streamHandler() {
         unsubscribe = store.subscribe(
           String(focusId),
           (event) => controller.enqueue(frame(event)),
-          expanded,
+          full,
         );
         handle.close = () => {
           unsubscribe();
@@ -140,6 +152,8 @@ function blackboardHandlers(initialRules: string[] = []) {
 }
 
 beforeEach(() => {
+  window.localStorage.clear();
+  useOrgChartStore.setState({ view: "focused", zoom: 1 });
   streams = [];
   streamRequests = [];
   store = new OrgStore();
@@ -225,29 +239,18 @@ describe("subscribeOrgTree", () => {
     expect(streamRequests).toHaveLength(0);
   });
 
-  it("asks for the reports of every expanded node", async () => {
+  it("asks for every node below the one it follows when told to", async () => {
     const events: OrgEvent[] = [];
 
     const stop = subscribeOrgTree(
-      null,
+      "auth",
       { onEvent: (event) => events.push(event), onStatus: () => {} },
-      ["auth", "a b"],
+      true,
     );
     await waitFor(() => expect(events).toHaveLength(1));
     stop();
 
-    expect(
-      new URL(streamRequests[0].url).searchParams.getAll("expanded"),
-    ).toEqual(["auth", "a b"]);
-    expect(events[0]).toMatchObject({
-      nodes: [
-        { id: "root" },
-        { id: "auth" },
-        { id: "billing" },
-        { id: "search" },
-        { id: "oauth" },
-      ],
-    });
+    expect(new URL(streamRequests[0].url).search).toBe("?node=auth&full=true");
   });
 });
 
@@ -259,45 +262,125 @@ function findCard(id: string, timeout?: number) {
   return screen.findByTestId(`org-node-${id}`, undefined, { timeout });
 }
 
-/** The part of a card that expands a team, or opens a leaf team's details. */
-function title(id: string) {
-  return within(card(id)).getByRole("button", {
-    name: new RegExp(`^${id} team`),
-  });
-}
-
-function detailsButton(id: string) {
-  return within(card(id)).getByRole("button", {
-    name: "ORG_CHART$OPEN_DETAILS",
-  });
-}
-
 function cardIds() {
   return screen
     .getAllByTestId(/^org-node-/)
     .map((element) => element.getAttribute("data-testid")?.slice(9));
 }
 
+/** The card of the team the page is on; clicking it opens its details. */
+function currentCard() {
+  return screen.getByRole("button", { name: "ORG_CHART$OPEN_DETAILS" });
+}
+
+function teamLink(id: string) {
+  return within(card(id)).getByRole("link");
+}
+
 function escalations() {
   return screen.getByRole("region", { name: "ORG_CHART$ESCALATIONS" });
 }
 
+function lastStream() {
+  return new URL(streamRequests.at(-1)!.url).searchParams;
+}
+
+async function showWholeOrg(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole("button", { name: "ORG_CHART$VIEW_FULL" }));
+}
+
+function badge(id: string) {
+  return (
+    within(card(id)).queryByRole("img", { name: "ORG_CHART$ESCALATION_COUNT" })
+      ?.textContent ?? null
+  );
+}
+
 describe("OrgChartView", () => {
-  describe("chart", () => {
-    it("draws the top team with its direct reports below it and nothing deeper", async () => {
+  describe("one team at a time", () => {
+    it("draws the team the page is on with its direct reports, and nothing else", async () => {
       renderWithProviders(<OrgChartView nodeId={null} />);
 
       const root = await findCard("root");
 
       expect(cardIds()).toEqual(["root", "auth", "billing", "search"]);
-      // Reports hang in a list inside their manager's own list item.
-      const branch = root.closest("li");
-      expect(branch).toContainElement(card("auth"));
-      expect(card("auth").closest("li")).not.toContainElement(card("billing"));
-      expect(title("root")).toHaveAttribute("aria-expanded", "true");
-      expect(title("auth")).toHaveAttribute("aria-expanded", "false");
-      // A team without sub-teams has nothing to expand.
-      expect(title("search")).not.toHaveAttribute("aria-expanded");
+      expect(root).toHaveAttribute("data-current");
+      expect(card("auth")).not.toHaveAttribute("data-current");
+      expect(lastStream().toString()).toBe("");
+    });
+
+    it("moves to a report when it is clicked", async () => {
+      store.upsert(input("a/b c", "root", "done", "services/odd"));
+      renderWithProviders(<OrgChartView nodeId={null} />);
+      await findCard("root");
+
+      expect(teamLink("auth")).toHaveAttribute("href", "/org/auth");
+      expect(teamLink("a/b c")).toHaveAttribute("href", "/org/a%2Fb%20c");
+    });
+
+    it("draws a line under each report that has sub-teams, and no other", async () => {
+      renderWithProviders(<OrgChartView nodeId={null} />);
+      await findCard("root");
+
+      const hasLine = (id: string) =>
+        card(id).closest("li")?.querySelector("[data-has-sub-teams]") !== null;
+
+      expect(hasLine("auth")).toBe(true);
+      expect(hasLine("billing")).toBe(false);
+      expect(hasLine("search")).toBe(false);
+    });
+
+    it("leads up to the team above only when there is one", async () => {
+      const { rerender } = renderWithProviders(<OrgChartView nodeId={null} />);
+      await findCard("root");
+      expect(
+        screen.queryByRole("link", { name: "ORG_CHART$GO_UP" }),
+      ).toBeNull();
+
+      rerender(<OrgChartView nodeId="auth" />);
+
+      expect(
+        await screen.findByRole("link", { name: "ORG_CHART$GO_UP" }),
+      ).toHaveAttribute("href", "/org/root");
+      expect(cardIds()).toEqual(["auth", "oauth"]);
+      expect(lastStream().toString()).toBe("node=auth");
+    });
+
+    it("draws a team without reports on its own", async () => {
+      renderWithProviders(<OrgChartView nodeId="search" />);
+      await findCard("search");
+
+      expect(cardIds()).toEqual(["search"]);
+    });
+
+    it("keeps the previous team on screen until the next one arrives", async () => {
+      const { rerender } = renderWithProviders(<OrgChartView nodeId={null} />);
+      await findCard("root");
+
+      rerender(<OrgChartView nodeId="auth" />);
+
+      // Never a loading notice in between.
+      expect(screen.queryByText("ORG_CHART$LOADING")).toBeNull();
+      expect(card("root")).toBeInTheDocument();
+      await waitFor(() => expect(cardIds()).toEqual(["auth", "oauth"]));
+    });
+
+    it("shows the way back up through the ancestors", async () => {
+      renderWithProviders(<OrgChartView nodeId="oauth" />);
+
+      const trail = await screen.findByRole("navigation", {
+        name: "ORG_CHART$BREADCRUMB_LABEL",
+      });
+
+      expect(
+        within(trail)
+          .getAllByRole("link")
+          .map((link) => link.getAttribute("href")),
+      ).toEqual(["/org/root", "/org/auth"]);
+      expect(within(trail).getByText("oauth team")).toHaveAttribute(
+        "aria-current",
+        "page",
+      );
     });
 
     it("keeps status and boundaries out of the chart", async () => {
@@ -311,117 +394,219 @@ describe("OrgChartView", () => {
     });
 
     // Hovering opens the same card; jsdom only drives it reliably by focus.
-    it("shows a team's status, boundary and agents while its card has keyboard focus", async () => {
+    it("shows a team's status, boundary, agents and escalations while its card has keyboard focus", async () => {
       const user = userEvent.setup();
-      renderWithProviders(<OrgChartView nodeId={null} />);
-      await findCard("root");
+      renderWithProviders(<OrgChartView nodeId="auth" />);
+      await findCard("oauth");
 
-      for (let presses = 0; presses < 10; presses += 1) {
-        if (document.activeElement === title("auth")) break;
+      for (let presses = 0; presses < 12; presses += 1) {
+        if (document.activeElement === teamLink("oauth")) break;
         await user.tab();
       }
-      expect(title("auth")).toHaveFocus();
+      expect(teamLink("oauth")).toHaveFocus();
 
       const tip = await screen.findByRole("tooltip");
-      expect(within(tip).getByText("Spec for auth")).toBeInTheDocument();
+      expect(within(tip).getByText("oauth team")).toBeInTheDocument();
+      expect(within(tip).getByText("Spec for oauth")).toBeInTheDocument();
       expect(
-        within(tip).getByText("ORG_CHART$HEALTH_CONVERGING"),
+        within(tip).getByText("ORG_CHART$HEALTH_DONE"),
       ).toBeInTheDocument();
-      expect(within(tip).getByText("services/auth")).toBeInTheDocument();
+      expect(within(tip).getByText("services/auth/oauth")).toBeInTheDocument();
       expect(
-        within(tip).getByText(/ORG_CHART\$ISOLATION_WORKTREE/),
+        within(tip).getByText(/ORG_CHART\$ISOLATION_SHARED/),
       ).toBeInTheDocument();
-      expect(within(tip).getByText("services/auth/**")).toBeInTheDocument();
+      expect(
+        within(tip).getByText("services/auth/oauth/**"),
+      ).toBeInTheDocument();
       expect(within(tip).getByText("src/types/**")).toBeInTheDocument();
       expect(
         within(tip).getByText(
           "ORG_CHART$ROLE_LEAD_IC (running), ORG_CHART$ROLE_MANAGER (idle)",
         ),
       ).toBeInTheDocument();
-
-      await user.keyboard("{Escape}");
-      await waitFor(() => expect(screen.queryByRole("tooltip")).toBeNull());
+      // What the team sent up, and that a team above still has it.
+      expect(within(tip).getByText("Pick a token format")).toBeInTheDocument();
+      expect(
+        within(tip).getByText(/ORG_CHART\$ESCALATION_HELD_BY/),
+      ).toBeInTheDocument();
     });
+  });
 
-    it("expands a team when it is clicked and collapses it when clicked again", async () => {
+  describe("the whole org", () => {
+    it("draws every team once asked to, with reports nested under their team", async () => {
       const user = userEvent.setup();
       renderWithProviders(<OrgChartView nodeId={null} />);
       await findCard("root");
 
-      await user.click(title("auth"));
+      await showWholeOrg(user);
 
       expect(await findCard("oauth")).toBeInTheDocument();
+      expect(cardIds()).toEqual(["root", "auth", "oauth", "billing", "search"]);
       expect(card("auth").closest("li")).toContainElement(card("oauth"));
-      expect(title("auth")).toHaveAttribute("aria-expanded", "true");
+      expect(card("auth").closest("li")).not.toContainElement(card("billing"));
+      expect(lastStream().toString()).toBe("full=true");
       expect(
-        new URL(streamRequests.at(-1)!.url).searchParams.getAll("expanded"),
-      ).toEqual(["auth"]);
-
-      await user.click(title("auth"));
-
-      expect(screen.queryByTestId("org-node-oauth")).toBeNull();
-      expect(title("auth")).toHaveAttribute("aria-expanded", "false");
-      // The rest of the chart stays as it was.
-      expect(cardIds()).toEqual(["root", "auth", "billing", "search"]);
+        screen.getByRole("button", { name: "ORG_CHART$VIEW_FULL" }),
+      ).toHaveAttribute("aria-pressed", "true");
     });
 
-    it("expands each team on its own", async () => {
-      store.upsert(
-        input("invoices", "billing", "done", "services/billing/inv"),
-      );
-      const user = userEvent.setup();
-      renderWithProviders(<OrgChartView nodeId={null} />);
-      await findCard("root");
-
-      await user.click(title("auth"));
+    it("marks the team the page is on and follows it without asking the server again", async () => {
+      useOrgChartStore.setState({ view: "full" });
+      const { rerender } = renderWithProviders(<OrgChartView nodeId="oauth" />);
       await findCard("oauth");
-      await user.click(title("billing"));
-      await findCard("invoices");
-      expect(card("oauth")).toBeInTheDocument();
 
-      await user.click(title("auth"));
+      expect(cardIds()).toEqual(["root", "auth", "oauth", "billing", "search"]);
+      expect(card("oauth")).toHaveAttribute("data-current");
+      expect(card("root")).not.toHaveAttribute("data-current");
+      expect(teamLink("billing")).toHaveAttribute("href", "/org/billing");
 
-      expect(screen.queryByTestId("org-node-oauth")).toBeNull();
-      expect(card("invoices")).toBeInTheDocument();
-      expect(title("billing")).toHaveAttribute("aria-expanded", "true");
+      rerender(<OrgChartView nodeId="billing" />);
+
+      expect(card("billing")).toHaveAttribute("data-current");
+      expect(card("oauth")).not.toHaveAttribute("data-current");
+      expect(streamRequests).toHaveLength(1);
     });
 
-    it("collapses the top team down to a single card", async () => {
+    it("keeps the team the page is on in the middle of the chart, through moves and zooming", async () => {
+      const scrolled: Array<{ id: string | null; behavior?: string }> = [];
+      const original = HTMLElement.prototype.scrollIntoView;
+      HTMLElement.prototype.scrollIntoView = function scrollIntoView(
+        options?: boolean | ScrollIntoViewOptions,
+      ) {
+        if (typeof options === "object") {
+          expect(options).toMatchObject({ block: "center", inline: "center" });
+          scrolled.push({
+            id: this.getAttribute("data-testid"),
+            behavior: options.behavior,
+          });
+        }
+      };
+      try {
+        useOrgChartStore.setState({ view: "full" });
+        const { rerender } = renderWithProviders(
+          <OrgChartView nodeId="oauth" />,
+        );
+        await findCard("oauth");
+        rerender(<OrgChartView nodeId="billing" />);
+
+        act(() => useOrgChartStore.getState().zoomOut());
+
+        // Jumps on arrival and on zoom, glides to a team already on screen.
+        expect(scrolled).toEqual([
+          { id: "org-node-oauth", behavior: "instant" },
+          { id: "org-node-billing", behavior: "smooth" },
+          { id: "org-node-billing", behavior: "instant" },
+        ]);
+      } finally {
+        HTMLElement.prototype.scrollIntoView = original;
+      }
+    });
+
+    it("says so when the page is on a team the org does not have", async () => {
+      useOrgChartStore.setState({ view: "full" });
+      renderWithProviders(<OrgChartView nodeId="missing" />);
+
+      expect(
+        await screen.findByText("ORG_CHART$NOT_FOUND_TITLE"),
+      ).toBeInTheDocument();
+    });
+
+    it("goes back to one team at a time", async () => {
+      useOrgChartStore.setState({ view: "full" });
+      const user = userEvent.setup();
+      renderWithProviders(<OrgChartView nodeId="auth" />);
+      await findCard("billing");
+
+      await user.click(
+        screen.getByRole("button", { name: "ORG_CHART$VIEW_FOCUSED" }),
+      );
+
+      await waitFor(() => expect(cardIds()).toEqual(["auth", "oauth"]));
+      expect(lastStream().toString()).toBe("node=auth");
+    });
+  });
+
+  describe("view and zoom settings", () => {
+    const stored = () =>
+      JSON.parse(window.localStorage.getItem("openhands-org-chart") ?? "{}")
+        .state;
+
+    it("zooms the chart in and out and back to actual size", async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<OrgChartView nodeId={null} />);
+      await findCard("root");
+      const zoomed = () =>
+        screen
+          .getByTestId("org-chart-zoom")
+          .style.getPropertyValue("--org-chart-zoom");
+      const reset = screen.getByRole("button", {
+        name: "ORG_CHART$ZOOM_RESET",
+      });
+      expect([zoomed(), reset.textContent]).toEqual(["1", "100%"]);
+
+      await user.click(
+        screen.getByRole("button", { name: "ORG_CHART$ZOOM_OUT" }),
+      );
+      await user.click(
+        screen.getByRole("button", { name: "ORG_CHART$ZOOM_OUT" }),
+      );
+      expect([zoomed(), reset.textContent]).toEqual(["0.8", "80%"]);
+
+      await user.click(
+        screen.getByRole("button", { name: "ORG_CHART$ZOOM_IN" }),
+      );
+      expect([zoomed(), reset.textContent]).toEqual(["0.9", "90%"]);
+
+      await user.click(reset);
+      expect([zoomed(), reset.textContent]).toEqual(["1", "100%"]);
+    });
+
+    it("stops at the smallest and largest zoom", async () => {
+      useOrgChartStore.setState({ zoom: 0.3 });
+      renderWithProviders(<OrgChartView nodeId={null} />);
+      await findCard("root");
+
+      expect(
+        screen.getByRole("button", { name: "ORG_CHART$ZOOM_OUT" }),
+      ).toBeDisabled();
+
+      act(() => useOrgChartStore.setState({ zoom: 2 }));
+
+      expect(
+        screen.getByRole("button", { name: "ORG_CHART$ZOOM_IN" }),
+      ).toBeDisabled();
+      expect(
+        screen.getByRole("button", { name: "ORG_CHART$ZOOM_OUT" }),
+      ).toBeEnabled();
+    });
+
+    it("remembers the zoom and the view", async () => {
       const user = userEvent.setup();
       renderWithProviders(<OrgChartView nodeId={null} />);
       await findCard("root");
 
-      await user.click(title("root"));
+      await user.click(
+        screen.getByRole("button", { name: "ORG_CHART$ZOOM_IN" }),
+      );
+      await showWholeOrg(user);
 
-      expect(cardIds()).toEqual(["root"]);
-      expect(title("root")).toHaveAttribute("aria-expanded", "false");
+      expect(stored()).toEqual({ view: "full", zoom: 1.1 });
     });
 
-    it("starts the chart at the requested team and links back up through its ancestors", async () => {
-      renderWithProviders(<OrgChartView nodeId="auth" />);
-
-      const trail = await screen.findByRole("navigation", {
-        name: "ORG_CHART$BREADCRUMB_LABEL",
-      });
-
-      expect(new URL(streamRequests[0].url).searchParams.get("node")).toBe(
-        "auth",
-      );
-      expect(
-        within(trail).getByRole("link", { name: "root team" }),
-      ).toHaveAttribute("href", "/org/root");
-      expect(within(trail).getByText("auth team")).toHaveAttribute(
-        "aria-current",
-        "page",
-      );
-      expect(cardIds()).toEqual(["auth", "oauth"]);
-    });
-
-    it("shows no trail at the root of the tree", async () => {
+    it("applies the same zoom to both views", async () => {
+      useOrgChartStore.setState({ zoom: 0.5 });
+      const user = userEvent.setup();
       renderWithProviders(<OrgChartView nodeId={null} />);
       await findCard("root");
 
-      expect(screen.queryByRole("navigation")).toBeNull();
+      await showWholeOrg(user);
+      await findCard("oauth");
+
+      expect(
+        screen
+          .getByTestId("org-chart-zoom")
+          .style.getPropertyValue("--org-chart-zoom"),
+      ).toBe("0.5");
     });
   });
 
@@ -441,27 +626,25 @@ describe("OrgChartView", () => {
       );
     });
 
-    it("follows changes below an expanded team, and not below a collapsed one", async () => {
+    it("follows changes deep in the tree only when the whole org is drawn", async () => {
       const user = userEvent.setup();
       renderWithProviders(<OrgChartView nodeId={null} />);
       await findCard("root");
-      await user.click(title("auth"));
-      await findCard("oauth");
 
       store.upsert(input("saml", "auth", "converging", "services/auth/saml"));
-      store.upsert(
-        input("ledger", "billing", "done", "services/billing/ledger"),
-      );
+      await showWholeOrg(user);
+      await findCard("saml");
+      store.upsert(input("device", "oauth", "done", "services/auth/oauth/d"));
 
-      expect(await findCard("saml")).toBeInTheDocument();
-      // billing gained its first sub-team, so it can now be expanded.
+      expect(await findCard("device")).toBeInTheDocument();
+      store.remove("oauth");
       await waitFor(() =>
-        expect(title("billing")).toHaveAttribute("aria-expanded", "false"),
+        expect(screen.queryByTestId("org-node-device")).toBeNull(),
       );
-      expect(screen.queryByTestId("org-node-ledger")).toBeNull();
+      expect(card("saml")).toBeInTheDocument();
     });
 
-    it("explains that the team is gone when the top node is removed", async () => {
+    it("explains that the team is gone when it is removed", async () => {
       renderWithProviders(<OrgChartView nodeId="auth" />);
       await findCard("auth");
 
@@ -475,12 +658,12 @@ describe("OrgChartView", () => {
       ).toHaveAttribute("href", "/org");
     });
 
-    it("stays gone when the top node is removed along with an ancestor", async () => {
+    it("stays gone when the team is removed along with an ancestor", async () => {
       renderWithProviders(<OrgChartView nodeId="oauth" />);
       await findCard("oauth");
 
-      // Removing the parent reports the top node first and the parent after
-      // it; that second frame must not bring the chart back.
+      // Removing the parent reports the team first and the parent after it;
+      // that second frame must not bring the chart back.
       store.remove("auth");
 
       expect(
@@ -493,8 +676,22 @@ describe("OrgChartView", () => {
       expect(screen.queryByTestId("org-node-oauth")).toBeNull();
     });
 
-    it("reports an unknown node without retrying", async () => {
-      renderWithProviders(<OrgChartView nodeId="missing" />);
+    it("says so in the whole-org view when the team the page is on is removed", async () => {
+      useOrgChartStore.setState({ view: "full" });
+      renderWithProviders(<OrgChartView nodeId="oauth" />);
+      await findCard("oauth");
+
+      store.remove("oauth");
+
+      expect(
+        await screen.findByText("ORG_CHART$NOT_FOUND_TITLE"),
+      ).toBeInTheDocument();
+    });
+
+    it("reports an unknown team without retrying, and recovers on a team that exists", async () => {
+      const { rerender } = renderWithProviders(
+        <OrgChartView nodeId="missing" />,
+      );
 
       expect(
         await screen.findByText("ORG_CHART$NOT_FOUND_TITLE"),
@@ -503,6 +700,11 @@ describe("OrgChartView", () => {
         setTimeout(resolve, 1200);
       });
       expect(streamRequests).toHaveLength(1);
+
+      rerender(<OrgChartView nodeId="auth" />);
+
+      expect(await findCard("auth")).toBeInTheDocument();
+      expect(screen.queryByText("ORG_CHART$NOT_FOUND_TITLE")).toBeNull();
     });
 
     it("treats a backend without an org tree as unavailable and keeps retrying", async () => {
@@ -572,172 +774,102 @@ describe("OrgChartView", () => {
       expect(screen.queryByRole("status")).toBeNull();
       expect(streamRequests).toHaveLength(2);
     });
-
-    it("keeps the chart on screen while an expansion is being fetched", async () => {
-      const user = userEvent.setup();
-      renderWithProviders(<OrgChartView nodeId={null} />);
-      await findCard("root");
-      server.use(
-        http.get(
-          "*/api/director/org/tree-stream",
-          () => HttpResponse.json({ detail: "down" }, { status: 503 }),
-          { once: true },
-        ),
-      );
-
-      await user.click(title("auth"));
-
-      // The failed attempt neither blanks the chart nor loses the request.
-      expect(await screen.findByRole("status")).toHaveTextContent(
-        "ORG_CHART$RECONNECTING",
-      );
-      expect(cardIds()).toEqual(["root", "auth", "billing", "search"]);
-      expect(await findCard("oauth", 4000)).toBeInTheDocument();
-      expect(screen.queryByRole("status")).toBeNull();
-    });
-
-    it("starts over when the route moves to another team", async () => {
-      const user = userEvent.setup();
-      const { rerender } = renderWithProviders(<OrgChartView nodeId={null} />);
-      await findCard("root");
-      await user.click(title("auth"));
-      await findCard("oauth");
-
-      rerender(<OrgChartView nodeId="billing" />);
-
-      await waitFor(() => expect(cardIds()).toEqual(["billing"]));
-      expect(
-        new URL(streamRequests.at(-1)!.url).searchParams.getAll("expanded"),
-      ).toEqual([]);
-    });
   });
 
   describe("escalations", () => {
-    it("lists what is waiting on the human, critical issues first, with the path each came up", async () => {
+    it("lists only what waits on the human, with where it came from and why each team passed it up", async () => {
       renderWithProviders(<OrgChartView nodeId={null} />);
       await findCard("root");
 
-      const items = within(escalations()).getAllByRole("button");
+      const items = within(escalations()).getAllByRole("link");
 
-      expect(items).toHaveLength(2);
+      // The token decision is still with the auth team: not the human's yet.
+      expect(items).toHaveLength(1);
       expect(items[0]).toHaveTextContent("ORG_CHART$ESCALATION_CRITICAL");
       expect(items[0]).toHaveTextContent("Retries charge twice");
       expect(items[0]).toHaveTextContent("root team › billing team");
-      expect(items[1]).toHaveTextContent("ORG_CHART$ESCALATION_DECISION");
-      expect(items[1]).toHaveTextContent("Pick a token format");
-      expect(items[1]).toHaveTextContent("JWT or opaque?");
-      expect(items[1]).toHaveTextContent("root team › auth team › oauth team");
+      expect(items[0]).toHaveTextContent("ORG_CHART$ESCALATION_PASSED_UP");
+      expect(items[0]).toHaveTextContent("root team: Refunds need a person");
+      expect(items[0]).toHaveAttribute("href", "/org/billing");
+      expect(
+        within(escalations()).queryByText("Pick a token format"),
+      ).toBeNull();
     });
 
-    it("lists an escalation raised below a collapsed team", async () => {
-      renderWithProviders(<OrgChartView nodeId={null} />);
-      await findCard("root");
+    it("lists them whichever team the page is on", async () => {
+      renderWithProviders(<OrgChartView nodeId="auth" />);
+      await findCard("auth");
 
-      expect(screen.queryByTestId("org-node-oauth")).toBeNull();
       expect(
-        within(escalations()).getByText("Pick a token format"),
+        within(escalations()).getByText("Retries charge twice"),
       ).toBeInTheDocument();
     });
 
-    it("marks every team on the way down to an escalation, and no other", async () => {
+    it("marks the teams above one that waits on the human, and not one a team still holds", async () => {
       renderWithProviders(<OrgChartView nodeId={null} />);
       await findCard("root");
 
-      const marked = Object.fromEntries(
-        ["root", "auth", "billing", "search"].map((id) => [
-          id,
-          within(card(id)).queryByRole("img", {
-            name: "ORG_CHART$ESCALATION_COUNT",
-          })?.textContent ?? null,
-        ]),
-      );
+      expect({
+        root: badge("root"),
+        auth: badge("auth"),
+        billing: badge("billing"),
+        search: badge("search"),
+      }).toEqual({ root: "1", auth: null, billing: "1", search: null });
+    });
 
-      expect(marked).toEqual({
-        root: "2",
-        auth: "1",
-        billing: "1",
-        search: null,
+    it("adds one the moment the last team above passes it up, and drops it once settled", async () => {
+      renderWithProviders(<OrgChartView nodeId={null} />);
+      await findCard("root");
+
+      // The auth team passes the decision up: now root holds it.
+      const passedOnce: Escalation = {
+        ...TOKEN_DECISION,
+        held_by: "root",
+        handoffs: [{ node_id: "auth", reason: "Affects billing too", at: "t" }],
+      };
+      store.upsert(
+        input("oauth", "auth", "done", "services/auth/oauth", [passedOnce]),
+      );
+      await new Promise((resolve) => {
+        setTimeout(resolve, 100);
       });
-    });
+      expect(within(escalations()).getAllByRole("link")).toHaveLength(1);
 
-    it("opens the chart down to the team that raised the one clicked", async () => {
-      store.upsert(input("device", "oauth", "done", "services/auth/oauth/d"));
-      const user = userEvent.setup();
-      renderWithProviders(<OrgChartView nodeId={null} />);
-      await findCard("root");
-      await user.click(title("root"));
-
-      await user.click(
-        within(escalations()).getByRole("button", {
-          name: /Pick a token format/,
-        }),
-      );
-
-      expect(await findCard("oauth")).toHaveAttribute("data-highlighted");
-      expect(title("root")).toHaveAttribute("aria-expanded", "true");
-      expect(title("auth")).toHaveAttribute("aria-expanded", "true");
-      // The team itself is shown, not opened.
-      expect(title("oauth")).toHaveAttribute("aria-expanded", "false");
-      expect(card("billing")).not.toHaveAttribute("data-highlighted");
-    });
-
-    it("lists only what is at or below the top of the chart", async () => {
-      renderWithProviders(<OrgChartView nodeId="auth" />);
-      await findCard("auth");
-
-      const items = within(escalations()).getAllByRole("button");
-
-      expect(items).toHaveLength(1);
-      expect(items[0]).toHaveTextContent("Pick a token format");
-    });
-
-    it("reveals from a chart that starts below the root", async () => {
+      // Root passes it up too: nobody is left but the human.
       store.upsert(
-        input("device", "oauth", "done", "services/auth/oauth/d", [
-          { ...DOUBLE_CHARGE, id: "deep", title: "Deep issue" },
-        ]),
-      );
-      const user = userEvent.setup();
-      renderWithProviders(<OrgChartView nodeId="auth" />);
-      await findCard("auth");
-
-      await user.click(
-        within(escalations()).getByRole("button", { name: /Deep issue/ }),
-      );
-
-      expect(await findCard("device")).toHaveAttribute("data-highlighted");
-      expect(
-        new URL(streamRequests.at(-1)!.url).searchParams.getAll("expanded"),
-      ).toEqual(["oauth"]);
-    });
-
-    it("adds and drops escalations as they are raised and settled", async () => {
-      renderWithProviders(<OrgChartView nodeId={null} />);
-      await findCard("root");
-
-      store.upsert(input("billing", "root", "converging", "services/billing"));
-      store.upsert(
-        input("search", "root", "converging", "services/search", [
-          { ...TOKEN_DECISION, id: "ranking", title: "Rank by recency?" },
+        input("oauth", "auth", "done", "services/auth/oauth", [
+          {
+            ...passedOnce,
+            held_by: null,
+            handoffs: [
+              ...passedOnce.handoffs,
+              { node_id: "root", reason: "A product call", at: "t" },
+            ],
+          },
         ]),
       );
 
-      expect(
-        await within(escalations()).findByText("Rank by recency?"),
-      ).toBeInTheDocument();
-      expect(
-        within(escalations()).queryByText("Retries charge twice"),
-      ).toBeNull();
-      expect(
-        within(card("billing")).queryByRole("img", {
-          name: "ORG_CHART$ESCALATION_COUNT",
-        }),
-      ).toBeNull();
+      const added = await within(escalations()).findByRole("link", {
+        name: /Pick a token format/,
+      });
+      expect(added).toHaveTextContent("auth team: Affects billing too");
+      expect(added).toHaveTextContent("root team: A product call");
+      expect(added).toHaveTextContent("ORG_CHART$ESCALATION_DECISION");
+      await waitFor(() => expect(badge("auth")).toBe("1"));
+      expect(badge("root")).toBe("2");
+
+      store.upsert(input("billing", "root", "converging", "services/billing"));
+
+      await waitFor(() =>
+        expect(
+          within(escalations()).queryByText("Retries charge twice"),
+        ).toBeNull(),
+      );
+      expect(badge("billing")).toBeNull();
     });
 
-    it("says so when nothing is waiting", async () => {
+    it("says so when nothing waits on the human", async () => {
       store.upsert(input("billing", "root", "converging", "services/billing"));
-      store.upsert(input("oauth", "auth", "done", "services/auth/oauth"));
 
       renderWithProviders(<OrgChartView nodeId={null} />);
       await findCard("root");
@@ -745,18 +877,18 @@ describe("OrgChartView", () => {
       expect(
         within(escalations()).getByText("ORG_CHART$ESCALATIONS_EMPTY"),
       ).toBeInTheDocument();
-      expect(within(escalations()).queryByRole("button")).toBeNull();
+      expect(within(escalations()).queryByRole("link")).toBeNull();
     });
   });
 
   describe("team details", () => {
-    it("opens from a team's details button, on its first agent, and closes again", async () => {
+    it("opens when the team the page is on is clicked, on its first agent, and closes again", async () => {
       blackboardHandlers();
       const user = userEvent.setup();
-      renderWithProviders(<OrgChartView nodeId={null} />);
-      await findCard("root");
+      renderWithProviders(<OrgChartView nodeId="auth" />);
+      await findCard("auth");
 
-      await user.click(detailsButton("auth"));
+      await user.click(currentCard());
 
       const drawer = screen.getByRole("dialog", { name: "auth team" });
       expect(
@@ -768,8 +900,6 @@ describe("OrgChartView", () => {
         within(drawer).getByText("ORG_CHART$NO_CONVERSATION"),
       ).toBeInTheDocument();
       expect(screen.queryByTestId("conversation-view")).toBeNull();
-      // Opening details does not expand the team.
-      expect(title("auth")).toHaveAttribute("aria-expanded", "false");
 
       await user.click(
         within(drawer).getByRole("button", {
@@ -779,27 +909,28 @@ describe("OrgChartView", () => {
       expect(screen.queryByRole("dialog")).toBeNull();
     });
 
-    it("opens when a team without sub-teams is clicked", async () => {
+    it("opens from the whole-org view too", async () => {
+      useOrgChartStore.setState({ view: "full" });
       blackboardHandlers();
       const user = userEvent.setup();
-      renderWithProviders(<OrgChartView nodeId={null} />);
-      await findCard("root");
+      renderWithProviders(<OrgChartView nodeId="oauth" />);
+      await findCard("oauth");
 
-      await user.click(title("search"));
+      await user.click(currentCard());
 
       expect(
-        screen.getByRole("dialog", { name: "search team" }),
+        screen.getByRole("dialog", { name: "oauth team" }),
       ).toBeInTheDocument();
     });
 
     it("mounts the conversation view targeted at the agent picked", async () => {
       blackboardHandlers();
       const user = userEvent.setup();
-      renderWithProviders(<OrgChartView nodeId={null} />, {
+      renderWithProviders(<OrgChartView nodeId="auth" />, {
         navigation: { conversationId: "route-conversation" },
       });
-      await findCard("root");
-      await user.click(detailsButton("auth"));
+      await findCard("auth");
+      await user.click(currentCard());
 
       await user.click(
         within(screen.getByRole("dialog")).getByRole("button", {
@@ -812,57 +943,29 @@ describe("OrgChartView", () => {
       );
     });
 
-    it("closes on Escape, and when the team is collapsed out of the chart", async () => {
+    it("closes on Escape, and when the page moves to another team", async () => {
       blackboardHandlers();
       const user = userEvent.setup();
-      renderWithProviders(<OrgChartView nodeId={null} />);
-      await findCard("root");
+      const { rerender } = renderWithProviders(<OrgChartView nodeId="auth" />);
+      await findCard("auth");
 
-      await user.click(detailsButton("auth"));
+      await user.click(currentCard());
       await user.keyboard("{Escape}");
       expect(screen.queryByRole("dialog")).toBeNull();
 
-      await user.click(title("auth"));
-      await user.click(within(await findCard("oauth")).getByRole("button"));
-      expect(
-        screen.getByRole("dialog", { name: "oauth team" }),
-      ).toBeInTheDocument();
-      await user.click(title("auth"));
-      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    });
-
-    it("offers to restart the chart from a team that has sub-teams and is not already on top", async () => {
-      store.upsert(input("a/b c", "root", "done", "services/odd"));
-      store.upsert(input("leaf", "a/b c", "done", "services/odd/leaf"));
-      blackboardHandlers();
-      const user = userEvent.setup();
-      renderWithProviders(<OrgChartView nodeId={null} />);
-      await findCard("root");
-      const link = () =>
-        screen.queryByRole("link", { name: "ORG_CHART$VIEW_AS_ROOT" });
-
-      await user.click(detailsButton("a/b c"));
-      expect(link()).toHaveAttribute("href", "/org/a%2Fb%20c");
-
-      await user.click(detailsButton("root"));
-      expect(
-        screen.getByRole("dialog", { name: "root team" }),
-      ).toBeInTheDocument();
-      expect(link()).toBeNull();
-
-      await user.click(title("search"));
-      expect(
-        screen.getByRole("dialog", { name: "search team" }),
-      ).toBeInTheDocument();
-      expect(link()).toBeNull();
+      await user.click(currentCard());
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+      rerender(<OrgChartView nodeId="billing" />);
+      await waitFor(() => expect(cardIds()).toEqual(["billing"]));
+      expect(screen.queryByRole("dialog")).toBeNull();
     });
 
     it("shows the boundary's rules and saves a newly taught one", async () => {
       const taught = blackboardHandlers(["Never log tokens."]);
       const user = userEvent.setup();
-      renderWithProviders(<OrgChartView nodeId={null} />);
-      await findCard("root");
-      await user.click(detailsButton("auth"));
+      renderWithProviders(<OrgChartView nodeId="auth" />);
+      await findCard("auth");
+      await user.click(currentCard());
 
       const memory = await screen.findByRole("region", {
         name: "ORG_CHART$MEMORY_TITLE",
@@ -893,10 +996,10 @@ describe("OrgChartView", () => {
     it("says so when there are no rules yet", async () => {
       blackboardHandlers();
       const user = userEvent.setup();
-      renderWithProviders(<OrgChartView nodeId={null} />);
-      await findCard("root");
+      renderWithProviders(<OrgChartView nodeId="auth" />);
+      await findCard("auth");
 
-      await user.click(detailsButton("auth"));
+      await user.click(currentCard());
 
       expect(
         await screen.findByText("ORG_CHART$MEMORY_EMPTY"),
@@ -911,9 +1014,9 @@ describe("OrgChartView", () => {
         ),
       );
       const user = userEvent.setup();
-      renderWithProviders(<OrgChartView nodeId={null} />);
-      await findCard("root");
-      await user.click(detailsButton("auth"));
+      renderWithProviders(<OrgChartView nodeId="auth" />);
+      await findCard("auth");
+      await user.click(currentCard());
       const field = await screen.findByLabelText("ORG_CHART$TEACH_LABEL");
 
       await user.type(field, "A rule");
@@ -934,10 +1037,10 @@ describe("OrgChartView", () => {
         ),
       );
       const user = userEvent.setup();
-      renderWithProviders(<OrgChartView nodeId={null} />);
-      await findCard("root");
+      renderWithProviders(<OrgChartView nodeId="auth" />);
+      await findCard("auth");
 
-      await user.click(detailsButton("auth"));
+      await user.click(currentCard());
 
       expect(await screen.findByRole("alert")).toHaveTextContent(
         "ORG_CHART$MEMORY_UNAVAILABLE",
@@ -948,25 +1051,23 @@ describe("OrgChartView", () => {
 });
 
 describe("mock mode", () => {
-  it("renders the org chart from the built-in mock handlers, expands a team and remembers a taught rule", async () => {
+  it("renders both views from the built-in mock handlers and remembers a taught rule", async () => {
     // No per-test stream handler: this exercises the default mock handlers.
     server.resetHandlers();
     const user = userEvent.setup();
 
-    renderWithProviders(<OrgChartView nodeId={null} />);
+    renderWithProviders(<OrgChartView nodeId="payments" />);
 
-    const payments = await screen.findByTestId("org-node-payments");
-    expect(
-      within(
-        screen.getByRole("region", { name: "ORG_CHART$ESCALATIONS" }),
-      ).getAllByRole("button"),
-    ).toHaveLength(2);
+    expect(await findCard("payments.worker")).toBeInTheDocument();
+    expect(cardIds()).toHaveLength(4);
+    // One escalation has reached the human; the other is still with a team.
+    expect(within(escalations()).getAllByRole("link")).toHaveLength(1);
 
-    await user.click(
-      within(payments).getByRole("button", { name: /^payments domain/ }),
-    );
-    const worker = await screen.findByTestId("org-node-payments.worker");
-    await user.click(within(worker).getByRole("button"));
+    await showWholeOrg(user);
+    await findCard("identity.api");
+    expect(cardIds()).toHaveLength(17);
+
+    await user.click(currentCard());
     await user.type(
       await screen.findByLabelText("ORG_CHART$TEACH_LABEL"),
       "Idempotency keys on every write.",

@@ -1329,3 +1329,9 @@ code .token {
 @utility run-log-detail-columns {
   grid-template-columns: 5rem minmax(0, 1fr);
 }
+
+/* Scales the org chart by the user's zoom setting, layout included, so a
+   zoomed-out chart also takes less room to scroll. */
+@utility org-chart-zoom {
+  zoom: var(--org-chart-zoom, 1);
+}

@@ -10,7 +10,7 @@ import {
 const SESSION_KEY_HEADER = "X-Session-API-Key";
 const TREE_STREAM_PATH = "/org/tree-stream";
 const NODE_QUERY_PARAM = "node";
-const EXPANDED_QUERY_PARAM = "expanded";
+const FULL_QUERY_PARAM = "full";
 const RETRY_DELAYS_MS = [1000, 2000, 5000];
 
 export class DirectorError extends Error {
@@ -114,9 +114,8 @@ function createSseDecoder(onData: (data: string) => void) {
 }
 
 /**
- * Follow the part of the org tree a chart has open: the node at its top
- * (`nodeId: null` is the root of the tree) and the reports of every node in
- * `expanded`. Expanding or collapsing a node means subscribing again.
+ * Follow one node of the org tree (`nodeId: null` is the root) with its
+ * ancestors and direct reports, or with `full` every node below it.
  *
  * The connection is re-established with backoff whenever it drops; every
  * (re)connect starts with a fresh snapshot, so callers never have to
@@ -128,7 +127,7 @@ function createSseDecoder(onData: (data: string) => void) {
 export function subscribeOrgTree(
   nodeId: NodeId | null,
   { onEvent, onStatus }: OrgStreamHandlers,
-  expanded: readonly NodeId[] = [],
+  full = false,
 ): () => void {
   const controller = new AbortController();
   let retryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -139,7 +138,7 @@ export function subscribeOrgTree(
     const { baseUrl, headers } = resolveDirector();
     const params = new URLSearchParams();
     if (nodeId !== null) params.set(NODE_QUERY_PARAM, nodeId);
-    expanded.forEach((id) => params.append(EXPANDED_QUERY_PARAM, id));
+    if (full) params.set(FULL_QUERY_PARAM, "true");
     const query = params.size > 0 ? `?${params}` : "";
     const url = `${baseUrl}${TREE_STREAM_PATH}${query}`;
     const response = await fetch(url, { headers, signal: controller.signal });

@@ -2,8 +2,6 @@ import React from "react";
 import { X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { AgentRole, OrgNode } from "#/api/director/types";
-import { NavigationLink } from "#/components/shared/navigation-link";
-import { orgNodePath } from "#/constants/org-chart";
 import {
   NavigationProvider,
   useNavigation,
@@ -43,15 +41,12 @@ function InspectedConversation({ conversationId }: { conversationId: string }) {
 
 interface AgentInspectorDrawerProps {
   node: OrgNode;
-  /** Whether the node is already the top of the chart. */
-  isTop: boolean;
   onClose: () => void;
 }
 
 /** One team's details: its boundary memory and its agents' conversations. */
 export function AgentInspectorDrawer({
   node,
-  isTop,
   onClose,
 }: AgentInspectorDrawerProps) {
   const { t } = useTranslation("openhands");
@@ -84,14 +79,6 @@ export function AgentInspectorDrawer({
         >
           {node.title}
         </h2>
-        {!isTop && node.child_ids.length > 0 ? (
-          <NavigationLink
-            to={orgNodePath(node.id)}
-            className="ml-auto shrink-0 text-xs text-link hover:underline"
-          >
-            {t(I18nKey.ORG_CHART$VIEW_AS_ROOT)}
-          </NavigationLink>
-        ) : null}
         <button
           type="button"
           onClick={onClose}

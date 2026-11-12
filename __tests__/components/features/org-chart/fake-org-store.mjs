@@ -43,6 +43,12 @@ function sameCounts(a, b) {
   return NODE_HEALTHS.every((health) => a[health] === b[health]);
 }
 
+/** @param {Pick<OrgNode, "escalations">} node */
+function waitingOnHuman(node) {
+  return node.escalations.filter((escalation) => escalation.held_by === null)
+    .length;
+}
+
 export class OrgStore {
   /** @type {Map<NodeId, OrgNode>} */
   #nodes = new Map();
@@ -143,7 +149,7 @@ export class OrgStore {
         ? existing.descendant_counts
         : emptyHealthCounts(),
       escalation_count:
-        input.escalations.length +
+        waitingOnHuman(input) +
         this.children(input.id).reduce(
           (sum, child) => sum + child.escalation_count,
           0,
@@ -220,8 +226,8 @@ export class OrgStore {
   }
 
   /**
-   * Every open escalation at or below `focusId`: critical issues first, then
-   * the longest waiting.
+   * Every escalation at or below `focusId` that waits on the human: critical
+   * issues first, then the longest waiting.
    *
    * @param {NodeId} focusId
    * @returns {OpenEscalation[]}
@@ -237,9 +243,11 @@ export class OrgStore {
         id,
         title,
       }));
-      node.escalations.forEach((escalation) => {
-        found.push({ node_id: node.id, escalation, path });
-      });
+      node.escalations
+        .filter((escalation) => escalation.held_by === null)
+        .forEach((escalation) => {
+          found.push({ node_id: node.id, escalation, path });
+        });
       stack.push(...this.children(node.id).reverse());
     }
     const rank = (/** @type {OpenEscalation} */ item) =>
@@ -253,13 +261,13 @@ export class OrgStore {
 
   /**
    * The focused node, its ancestors, and the direct reports of the focused
-   * node and of every node in `expanded`.
+   * node; with `full`, every node below it instead.
    *
    * @param {NodeId} focusId
-   * @param {readonly NodeId[]} [expanded]
+   * @param {boolean} [full]
    * @returns {Extract<OrgEvent, { type: "snapshot" }> | null}
    */
-  snapshot(focusId, expanded = []) {
+  snapshot(focusId, full = false) {
     const focus = this.#nodes.get(focusId);
     if (!focus) return null;
     /** @type {Map<NodeId, OrgNode>} */
@@ -268,39 +276,54 @@ export class OrgStore {
       ...this.ancestors(focusId),
       focus,
       ...this.children(focusId),
-      ...expanded.flatMap((id) => this.children(id)),
+      ...(full ? this.#below(focusId) : []),
     ].forEach((node) => nodes.set(node.id, node));
     return {
       type: "snapshot",
       focus_id: focusId,
       nodes: [...nodes.values()],
-      escalations: this.escalations(focusId),
+      escalations: this.#waitingAnywhere(),
     };
   }
 
+  /** What waits on the human in the whole tree. */
+  #waitingAnywhere() {
+    return this.#rootId === null ? [] : this.escalations(this.#rootId);
+  }
+
+  /** @param {NodeId} id @returns {OrgNode[]} Every node below `id`. */
+  #below(id) {
+    return this.children(id).flatMap((child) => [
+      child,
+      ...this.#below(child.id),
+    ]);
+  }
+
   /**
-   * Receive events for what a snapshot of `focusId` and `expanded` contains.
+   * Receive events for what a snapshot of `focusId` contains.
    *
    * @param {NodeId} focusId
    * @param {OrgListener} listener
-   * @param {readonly NodeId[]} [expanded]
+   * @param {boolean} [full]
    * @returns {() => void} Unsubscribe.
    */
-  subscribe(focusId, listener, expanded = []) {
-    let told = JSON.stringify(this.escalations(focusId));
+  subscribe(focusId, listener, full = false) {
+    let told = JSON.stringify(this.#waitingAnywhere());
     const subscription = {
       /** @param {Emission} emission */
       deliver: (emission) => {
         if (
           this.#isVisibleFrom(focusId, emission.id, emission.parent_id) ||
-          (emission.parent_id !== null && expanded.includes(emission.parent_id))
+          (full &&
+            this.ancestors(emission.id).some(
+              (ancestor) => ancestor.id === focusId,
+            ))
         ) {
           listener(emission.event);
         }
       },
       announce: () => {
-        if (!this.#nodes.has(focusId)) return;
-        const escalations = this.escalations(focusId);
+        const escalations = this.#waitingAnywhere();
         const current = JSON.stringify(escalations);
         if (current === told) return;
         told = current;
@@ -326,7 +349,7 @@ export class OrgStore {
   /** @param {OrgNode} node */
   #rollup(node) {
     const counts = emptyHealthCounts();
-    let escalationCount = node.escalations.length;
+    let escalationCount = waitingOnHuman(node);
     this.children(node.id).forEach((child) => {
       counts[child.health] += 1;
       NODE_HEALTHS.forEach((health) => {

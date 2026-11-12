@@ -14,10 +14,11 @@ import {
 /**
  * MSW handlers for the Agent Server director API, so `npm run dev:mock` renders the
  * org chart without one running. The tree is small and static: one root, a
- * few domains, a few modules under each, and two open escalations.
+ * few domains, a few modules under each, and two open escalations: one still
+ * held by the team above, one that has reached the human.
  */
 const NODE_QUERY_PARAM = "node";
-const EXPANDED_QUERY_PARAM = "expanded";
+const FULL_QUERY_PARAM = "full";
 const BASE = `*${DIRECTOR_BASE_PATH}`;
 const ROOT_ID = "root";
 
@@ -48,6 +49,8 @@ const ESCALATIONS: Record<NodeId, OrgNode["escalations"]> = {
       title: "Session tokens: signed JWTs or opaque server-side sessions?",
       detail: "The api and worker teams disagree.",
       raised_at: "2026-11-10T09:12:00Z",
+      held_by: ROOT_ID,
+      handoffs: [],
     },
   ],
   "payments.worker": [
@@ -57,9 +60,28 @@ const ESCALATIONS: Record<NodeId, OrgNode["escalations"]> = {
       title: "Idempotency keys collide across retries",
       detail: "The fix needs a schema change outside this team's boundary.",
       raised_at: "2026-11-11T16:40:00Z",
+      held_by: null,
+      handoffs: [
+        {
+          node_id: "payments",
+          reason: "The schema is shared with the identity domain.",
+          at: "2026-11-11T17:05:00Z",
+        },
+        {
+          node_id: ROOT_ID,
+          reason: "Changing it means downtime only a human can schedule.",
+          at: "2026-11-11T17:30:00Z",
+        },
+      ],
     },
   ],
 };
+
+function waitingOnHuman(id: NodeId) {
+  return (ESCALATIONS[id] ?? []).filter(
+    (escalation) => escalation.held_by === null,
+  ).length;
+}
 
 function zeroCounts(): HealthCounts {
   return {
@@ -104,13 +126,12 @@ function buildMockTree() {
         spec_summary: `Implements ${module.name} for ${domain.name}.`,
         escalations: ESCALATIONS[id] ?? [],
         descendant_counts: zeroCounts(),
-        escalation_count: ESCALATIONS[id]?.length ?? 0,
+        escalation_count: waitingOnHuman(id),
       });
     });
     const own = ESCALATIONS[domain.name] ?? [];
     const below = MODULES.reduce(
-      (sum, module) =>
-        sum + (ESCALATIONS[`${domain.name}.${module.name}`]?.length ?? 0),
+      (sum, module) => sum + waitingOnHuman(`${domain.name}.${module.name}`),
       0,
     );
     nodes.set(domain.name, {
@@ -127,7 +148,7 @@ function buildMockTree() {
       spec_summary: `Interface contracts between the ${domain.name} services.`,
       escalations: own,
       descendant_counts: { ...moduleCounts },
-      escalation_count: own.length + below,
+      escalation_count: waitingOnHuman(domain.name) + below,
     });
   });
   nodes.set(ROOT_ID, {
@@ -144,7 +165,10 @@ function buildMockTree() {
     spec_summary: "Owns cross-domain contracts and the release plan.",
     escalations: [],
     descendant_counts: rootCounts,
-    escalation_count: Object.values(ESCALATIONS).flat().length,
+    escalation_count: Object.keys(ESCALATIONS).reduce(
+      (sum, id) => sum + waitingOnHuman(id),
+      0,
+    ),
   });
   return nodes;
 }
@@ -161,25 +185,30 @@ function ancestorsOf(node: OrgNode): OrgNode[] {
   return ancestors;
 }
 
+function subtreeOf(nodeId: NodeId): OrgNode[] {
+  return reportsOf(nodeId).flatMap((node) => [node, ...subtreeOf(node.id)]);
+}
+
 function reportsOf(nodeId: NodeId): OrgNode[] {
   return (tree.get(nodeId)?.child_ids ?? []).flatMap(
     (id) => tree.get(id) ?? [],
   );
 }
 
-/** Open escalations at or below `focus`, critical issues first. */
-function escalationsBelow(focus: OrgNode): OpenEscalation[] {
+/** What waits on the human anywhere in the tree, critical issues first. */
+function escalationsWaiting(): OpenEscalation[] {
   return [...tree.values()]
-    .filter((node) => node === focus || ancestorsOf(node).includes(focus))
     .flatMap((node) =>
-      node.escalations.map((escalation) => ({
-        node_id: node.id,
-        escalation,
-        path: [...ancestorsOf(node), node].map(({ id, title }) => ({
-          id,
-          title,
+      node.escalations
+        .filter((escalation) => escalation.held_by === null)
+        .map((escalation) => ({
+          node_id: node.id,
+          escalation,
+          path: [...ancestorsOf(node), node].map(({ id, title }) => ({
+            id,
+            title,
+          })),
         })),
-      })),
     )
     .sort(
       (a, b) =>
@@ -189,7 +218,7 @@ function escalationsBelow(focus: OrgNode): OpenEscalation[] {
     );
 }
 
-function snapshot(focusId: NodeId, expanded: NodeId[]): OrgEvent | null {
+function snapshot(focusId: NodeId, full: boolean): OrgEvent | null {
   const focus = tree.get(focusId);
   if (!focus) return null;
   const nodes = new Map<NodeId, OrgNode>();
@@ -197,13 +226,13 @@ function snapshot(focusId: NodeId, expanded: NodeId[]): OrgEvent | null {
     ...ancestorsOf(focus),
     focus,
     ...reportsOf(focusId),
-    ...expanded.flatMap(reportsOf),
+    ...(full ? subtreeOf(focusId) : []),
   ].forEach((node) => nodes.set(node.id, node));
   return {
     type: "snapshot",
     focus_id: focusId,
     nodes: [...nodes.values()],
-    escalations: escalationsBelow(focus),
+    escalations: escalationsWaiting(),
   };
 }
 
@@ -221,7 +250,7 @@ export const DIRECTOR_HANDLERS = [
   http.get(`${BASE}/org/tree-stream`, ({ request }) => {
     const params = new URL(request.url).searchParams;
     const focusId = params.get(NODE_QUERY_PARAM) ?? ROOT_ID;
-    const event = snapshot(focusId, params.getAll(EXPANDED_QUERY_PARAM));
+    const event = snapshot(focusId, params.get(FULL_QUERY_PARAM) === "true");
     if (!event) return notFound(focusId);
 
     // One snapshot, then the stream stays open like the real one does.

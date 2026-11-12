@@ -36,7 +36,20 @@ export interface AgentRef {
 
 export type EscalationKind = "critical_issue" | "design_decision";
 
-/** Something a node cannot settle itself and has sent up to the human. */
+/** A node that tried to settle an escalation, could not, and passed it up. */
+export interface EscalationHandoff {
+  node_id: NodeId;
+  /** Why this node could not settle it. */
+  reason: string;
+  /** ISO 8601 timestamp. */
+  at: string;
+}
+
+/**
+ * Something a node cannot settle itself. It goes to the node above, which
+ * settles it or passes it up in turn; it waits on the human only once every
+ * node above the one that raised it has passed it up.
+ */
 export interface Escalation {
   /** Unique within the node that raised it. */
   id: string;
@@ -45,6 +58,10 @@ export interface Escalation {
   detail: string;
   /** ISO 8601 timestamp. */
   raised_at: string;
+  /** The node working on it now; `null` when it waits on the human. */
+  held_by: NodeId | null;
+  /** The nodes that passed it up, nearest to the one that raised it first. */
+  handoffs: EscalationHandoff[];
 }
 
 export type HealthCounts = Record<NodeHealth, number>;
@@ -61,21 +78,18 @@ export interface OrgNode {
   agents: AgentRef[];
   health: NodeHealth;
   spec_summary: string;
-  /** Open escalations this node raised, oldest first. */
+  /** Open escalations this node raised, wherever above they are held. */
   escalations: Escalation[];
   /**
    * Health of every node below this one, so a parent can summarize its whole
    * subtree without the client loading it.
    */
   descendant_counts: HealthCounts;
-  /**
-   * Open escalations on this node and every node below it, so a collapsed
-   * parent still shows that something below needs the human.
-   */
+  /** Escalations from this node or below that wait on the human. */
   escalation_count: number;
 }
 
-/** An escalation with the chain of nodes it travelled up. */
+/** An escalation that waits on the human, with the nodes it came up through. */
 export interface OpenEscalation {
   /** The node that raised it. */
   node_id: NodeId;
@@ -109,10 +123,10 @@ export interface NodeBlackboard {
 }
 
 /**
- * A snapshot holds the focused node, its ancestors (for the breadcrumb), its
- * direct reports and the direct reports of every expanded node, plus every
- * open escalation at or below the focused node. Node events are limited to
- * that same set; an `escalations` event carries the whole new list.
+ * A snapshot holds the focused node, its ancestors and its direct reports
+ * (or, for a full stream, every node below it), plus every escalation in the
+ * tree that waits on the human. Node events are limited to that same set of
+ * nodes; an `escalations` event carries the whole new list.
  */
 export type OrgEvent =
   | {

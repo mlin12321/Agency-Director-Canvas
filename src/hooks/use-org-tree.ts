@@ -18,7 +18,7 @@ interface OrgTreeState {
 }
 
 type OrgTreeAction =
-  | { kind: "reset" }
+  | { kind: "subscribe" }
   | { kind: "status"; status: OrgStreamStatus }
   | { kind: "event"; event: OrgEvent };
 
@@ -30,7 +30,13 @@ const INITIAL_STATE: OrgTreeState = {
 };
 
 function reduce(state: OrgTreeState, action: OrgTreeAction): OrgTreeState {
-  if (action.kind === "reset") return INITIAL_STATE;
+  // A new subscription keeps what is on screen until its snapshot arrives,
+  // but may leave the terminal state of the previous one.
+  if (action.kind === "subscribe") {
+    return state.status === "not_found"
+      ? { ...state, status: "connecting" }
+      : state;
+  }
   // Terminal for this subscription: later frames about the node's former
   // ancestors must not bring a removed node back.
   if (state.status === "not_found") return state;
@@ -55,7 +61,7 @@ function reduce(state: OrgTreeState, action: OrgTreeAction): OrgTreeState {
       return { ...state, nodes };
     }
     case "node_removed": {
-      // Losing the focused node means there is nothing left to show here.
+      // Losing the followed node means there is nothing left to show here.
       if (event.id === state.focusId) {
         return { ...state, status: "not_found" };
       }
@@ -72,67 +78,35 @@ function reduce(state: OrgTreeState, action: OrgTreeAction): OrgTreeState {
 
 export interface OrgTreeView {
   status: OrgStreamStatus;
-  /** The node at the top of the chart. */
-  focus: OrgNode | null;
-  /** Root first, excluding the focused node. */
-  ancestors: OrgNode[];
-  /** Every node the server has sent for the open part of the chart. */
+  /** The node the stream follows; `null` until its first snapshot. */
+  focusId: NodeId | null;
+  /** Every node the server has sent for this subscription. */
   nodes: ReadonlyMap<NodeId, OrgNode>;
-  /** Every open escalation at or below the focused node. */
+  /** Every escalation in the tree that waits on the human. */
   escalations: OpenEscalation[];
 }
 
 /**
- * Live view of the open part of an org chart: the node at its top
- * (`nodeId: null` is the root of the tree), that node's ancestors, and the
- * direct reports of it and of every node in `expanded`.
+ * Live view of one node of the org tree (`nodeId: null` is the root) with
+ * its ancestors and direct reports, or with `full` every node below it.
  *
- * Changing `expanded` keeps what is on screen until the server answers with
- * the new set; changing `nodeId` starts over.
+ * Following another node keeps the previous one on screen until the server
+ * answers, so moving through the chart does not flash a loading state.
  */
-export function useOrgTree(
-  nodeId: NodeId | null,
-  expanded: readonly NodeId[] = [],
-): OrgTreeView {
+export function useOrgTree(nodeId: NodeId | null, full = false): OrgTreeView {
   const [state, dispatch] = React.useReducer(reduce, INITIAL_STATE);
-  // Order does not matter to the server, so it must not cause a resubscribe.
-  const expandedKey = JSON.stringify([...expanded].sort());
-  const followed = React.useRef<NodeId | null | undefined>(undefined);
 
   React.useEffect(() => {
-    if (followed.current !== nodeId) {
-      followed.current = nodeId;
-      dispatch({ kind: "reset" });
-    }
+    dispatch({ kind: "subscribe" });
     return subscribeOrgTree(
       nodeId,
       {
         onEvent: (event) => dispatch({ kind: "event", event }),
         onStatus: (status) => dispatch({ kind: "status", status }),
       },
-      JSON.parse(expandedKey) as NodeId[],
+      full,
     );
-  }, [nodeId, expandedKey]);
+  }, [nodeId, full]);
 
-  return React.useMemo(() => {
-    const focus =
-      state.focusId === null ? null : (state.nodes.get(state.focusId) ?? null);
-
-    const ancestors: OrgNode[] = [];
-    let parentId = focus?.parent_id ?? null;
-    while (parentId !== null) {
-      const parent = state.nodes.get(parentId);
-      if (!parent) break;
-      ancestors.unshift(parent);
-      parentId = parent.parent_id;
-    }
-
-    return {
-      status: state.status,
-      focus,
-      ancestors,
-      nodes: state.nodes,
-      escalations: state.escalations,
-    };
-  }, [state]);
+  return state;
 }

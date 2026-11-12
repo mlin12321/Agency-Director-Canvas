@@ -1,17 +1,21 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import type { NodeId, OpenEscalation } from "#/api/director/types";
+import type { NodeId, OrgNode } from "#/api/director/types";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import { ORG_CHART_PATH } from "#/constants/org-chart";
 import { useOrgTree } from "#/hooks/use-org-tree";
 import { I18nKey } from "#/i18n/declaration";
+import { useOrgChartStore } from "#/stores/org-chart-store";
+import { cn } from "#/utils/utils";
 import { AgentInspectorDrawer } from "./agent-inspector-drawer";
+import { ChartToolbar } from "./chart-toolbar";
 import { EscalationsPanel } from "./escalations-panel";
+import { FocusedChart } from "./focused-chart";
 import { OrgBreadcrumb } from "./org-breadcrumb";
-import { OrgTree, type OrgTreeHighlight } from "./org-tree";
+import { OrgTree } from "./org-tree";
 
 interface OrgChartViewProps {
-  /** The node at the top of the chart; `null` is the root of the tree. */
+  /** The team the page is on; `null` is the root of the tree. */
   nodeId: NodeId | null;
 }
 
@@ -30,58 +34,47 @@ function Notice({
   );
 }
 
-function OrgChart({ nodeId }: OrgChartViewProps) {
+/** Root first, excluding the node itself; stops where the page has no more. */
+function ancestorsOf(node: OrgNode, nodes: ReadonlyMap<NodeId, OrgNode>) {
+  const ancestors: OrgNode[] = [];
+  let parentId = node.parent_id;
+  while (parentId !== null) {
+    const parent = nodes.get(parentId);
+    if (!parent) break;
+    ancestors.unshift(parent);
+    parentId = parent.parent_id;
+  }
+  return ancestors;
+}
+
+/**
+ * An org chart of agent teams. It is on one team at a time and draws either
+ * that team with its direct reports, or the whole org with that team in the
+ * middle. Besides the org itself, only what waits on the human is shown.
+ */
+export function OrgChartView({ nodeId }: OrgChartViewProps) {
   const { t } = useTranslation("openhands");
-  // The top node starts expanded and is tracked apart from the rest, because
-  // its id is not known until the server answers.
-  const [topCollapsed, setTopCollapsed] = React.useState(false);
-  const [expanded, setExpanded] = React.useState<ReadonlySet<NodeId>>(
-    () => new Set(),
+  const view = useOrgChartStore((state) => state.view);
+  const zoom = useOrgChartStore((state) => state.zoom);
+  const full = view === "full";
+  // The whole org is one subscription whichever team the page is on.
+  const { status, focusId, nodes, escalations } = useOrgTree(
+    full ? null : nodeId,
+    full,
   );
+  // Details belong to the team they were opened on.
   const [detailsId, setDetailsId] = React.useState<NodeId | null>(null);
-  const [highlight, setHighlight] = React.useState<OrgTreeHighlight | null>(
-    null,
-  );
-  const expandedIds = React.useMemo(() => [...expanded], [expanded]);
-  const { status, focus, ancestors, nodes, escalations } = useOrgTree(
-    nodeId,
-    expandedIds,
-  );
-  const focusId = focus?.id ?? null;
-
-  const isExpanded = React.useCallback(
-    (id: NodeId) => (id === focusId ? !topCollapsed : expanded.has(id)),
-    [focusId, topCollapsed, expanded],
-  );
-  const toggle = React.useCallback(
-    (id: NodeId) => {
-      if (id === focusId) {
-        setTopCollapsed((collapsed) => !collapsed);
-        return;
-      }
-      setExpanded((current) => {
-        const next = new Set(current);
-        if (!next.delete(id)) next.add(id);
-        return next;
-      });
-    },
-    [focusId],
-  );
-  const reveal = React.useCallback(
-    (item: OpenEscalation) => {
-      const path = item.path.map((step) => step.id);
-      // Open every team between the top of this chart and the one that
-      // raised the escalation, so its card is on screen.
-      const between = path.slice(path.indexOf(focusId ?? "") + 1, -1);
-      setTopCollapsed(false);
-      setExpanded((current) => new Set([...current, ...between]));
-      setHighlight({ id: item.node_id, at: Date.now() });
-    },
-    [focusId],
-  );
   const closeDetails = React.useCallback(() => setDetailsId(null), []);
+  const titleOf = React.useCallback(
+    (id: NodeId) => nodes.get(id)?.title ?? id,
+    [nodes],
+  );
 
-  if (status === "not_found") {
+  const top = focusId === null ? null : (nodes.get(focusId) ?? null);
+  const current = full && nodeId !== null ? (nodes.get(nodeId) ?? null) : top;
+
+  // In the whole-org view an unknown team is one the tree does not hold.
+  if (status === "not_found" || (top && !current)) {
     return (
       <Notice title={t(I18nKey.ORG_CHART$NOT_FOUND_TITLE)}>
         <NavigationLink
@@ -94,7 +87,7 @@ function OrgChart({ nodeId }: OrgChartViewProps) {
     );
   }
 
-  if (!focus) {
+  if (!top || !current) {
     return status === "unavailable" ? (
       <Notice title={t(I18nKey.ORG_CHART$UNAVAILABLE_TITLE)}>
         <p className="max-w-md text-sm text-muted">
@@ -106,60 +99,73 @@ function OrgChart({ nodeId }: OrgChartViewProps) {
     );
   }
 
-  // Collapsing a team takes its sub-teams off the chart, and their details
-  // with them.
-  const details = detailsId === null ? null : (nodes.get(detailsId) ?? null);
+  const ancestors = ancestorsOf(current, nodes);
   const stale = status === "reconnecting" || status === "unavailable";
+  const openDetails = () => setDetailsId(current.id);
 
   return (
     <div data-testid="org-chart" className="flex h-full min-h-0">
       <div className="flex min-w-0 flex-1 flex-col gap-4 p-4">
-        {ancestors.length > 0 || stale ? (
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            {ancestors.length > 0 ? (
-              <OrgBreadcrumb ancestors={ancestors} current={focus} />
-            ) : (
-              <span />
-            )}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <OrgBreadcrumb ancestors={ancestors} current={current} />
+          <div className="flex items-center gap-3">
             {stale ? (
               <span role="status" className="text-xs text-feedback-warning">
                 {t(I18nKey.ORG_CHART$RECONNECTING)}
               </span>
             ) : null}
+            <ChartToolbar />
           </div>
-        ) : null}
-        <EscalationsPanel escalations={escalations} onReveal={reveal} />
+        </div>
+        <EscalationsPanel escalations={escalations} />
         <section
           aria-label={t(I18nKey.ORG_CHART$NAV)}
-          className="min-h-0 flex-1 overflow-auto rounded-xl border border-border p-4"
+          className="min-h-0 flex-1 overflow-auto rounded-xl border border-border"
         >
-          <OrgTree
-            root={focus}
-            nodes={nodes}
-            isExpanded={isExpanded}
-            onToggle={toggle}
-            onOpenDetails={setDetailsId}
-            highlight={highlight}
-          />
+          {/* Whatever is drawn sits in the middle of the page, both ways,
+              and scrolls once it is larger than the page. */}
+          <div
+            className={
+              full
+                ? "flex min-h-full w-max min-w-full items-center justify-center p-6"
+                : "flex min-h-full w-full items-center justify-center p-6"
+            }
+          >
+            <div
+              data-testid="org-chart-zoom"
+              style={{ "--org-chart-zoom": zoom } as React.CSSProperties}
+              className={cn("org-chart-zoom", full || "w-full")}
+            >
+              {full ? (
+                <OrgTree
+                  root={top}
+                  nodes={nodes}
+                  currentId={current.id}
+                  titleOf={titleOf}
+                  onOpenDetails={openDetails}
+                />
+              ) : (
+                <FocusedChart
+                  current={current}
+                  parent={ancestors.at(-1) ?? null}
+                  reports={current.child_ids.flatMap(
+                    (id) => nodes.get(id) ?? [],
+                  )}
+                  titleOf={titleOf}
+                  onOpenDetails={openDetails}
+                />
+              )}
+            </div>
+          </div>
         </section>
       </div>
-      {details ? (
+      {detailsId === current.id ? (
         <AgentInspectorDrawer
-          key={details.id}
-          node={details}
-          isTop={details.id === focus.id}
+          key={current.id}
+          node={current}
           onClose={closeDetails}
         />
       ) : null}
     </div>
   );
-}
-
-/**
- * An org chart of agent teams, drawn top-down from `nodeId`. Teams expand one
- * at a time; besides the org itself, only escalations are shown outright.
- */
-export function OrgChartView({ nodeId }: OrgChartViewProps) {
-  // What is expanded, highlighted or open belongs to one chart.
-  return <OrgChart key={nodeId ?? ""} nodeId={nodeId} />;
 }
