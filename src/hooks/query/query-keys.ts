@@ -121,6 +121,11 @@ export const AUTOMATION_WEBHOOK_QUERY_KEYS = {
     ["automation-webhooks", backendId, orgId, revision] as const,
 } as const;
 
+export const DIRECTOR_QUERY_KEYS = {
+  blackboard: (backendId: string, nodeId: string) =>
+    ["director", "blackboard", backendId, nodeId] as const,
+} as const;
+
 export const MARS_QUERY_KEYS = {
   all: ["mars"] as const,
   authState: ["mars", "auth-state"] as const,
