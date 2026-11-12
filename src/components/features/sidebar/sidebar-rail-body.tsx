@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import {
   ChevronLeft,
   ChevronRight,
+  Network,
   Plus,
   Server,
   Settings,
@@ -10,6 +11,7 @@ import {
 import { OpenHandsLogoButton } from "#/components/shared/buttons/openhands-logo-button";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import { getLockedCloudHost } from "#/api/agent-server-config";
+import { ORG_CHART_PATH } from "#/constants/org-chart";
 import {
   automationListPath,
   getInterfaceCopy,
@@ -250,6 +252,16 @@ export function SidebarRailBody({
             </svg>
           }
         />
+        {/* The director only runs next to a local backend. */}
+        {isCloudBackend ? null : (
+          <SidebarNavLink
+            to={ORG_CHART_PATH}
+            label={t(I18nKey.ORG_CHART$NAV)}
+            testId="sidebar-org-chart-link"
+            collapsed={collapsed}
+            icon={<Network width={ICON_SIZE} height={ICON_SIZE} />}
+          />
+        )}
         {/* The interface manifest owns this entry's label, so an absent
             manifest leaves the rail without it rather than with host copy. */}
         {hasAutomationInterface() && (

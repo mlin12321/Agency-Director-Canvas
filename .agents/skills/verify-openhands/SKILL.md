@@ -105,6 +105,9 @@ control-openhands stop                         # stops only this run; evidence s
   the build locked to that Cloud host on `ports.lockedCloud` (P+4), because
   only `scripts/static-server.mjs` takes `--lock-to-cloud`; `browser goto
   <lockedCloud.url>/` opens it as a run page, and `stop` ends it with the run.
+  `--director-fixture` starts the Agent Server with its built-in org tree
+  (`OH_DIRECTOR_FIXTURE=1`) and keeps boundary memory in the run's `qa-repo`,
+  which the org chart (F30) needs.
   Never hand-start these processes on fixed ports: `stop` cannot see them.
 - **Doctor** checks the launcher's process group, ports, served build revision,
   unauthenticated rejection, authenticated settings, Agent Server pin and the

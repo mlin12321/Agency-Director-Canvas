@@ -34,6 +34,7 @@ export default [
       route("app", "routes/app-settings.tsx"),
       route("secrets", "routes/secrets-settings.tsx"),
     ]),
+    route("org/:nodeId?", "routes/org-chart.tsx"),
     route("oauth/device/verify", "routes/device-verify.tsx"),
     route("automations", "routes/automations-list.tsx"),
     route("automations/git-sync", "routes/automation-git-sync.tsx"),
