@@ -34,6 +34,19 @@ export interface AgentRef {
   status: string;
 }
 
+export type EscalationKind = "critical_issue" | "design_decision";
+
+/** Something a node cannot settle itself and has sent up to the human. */
+export interface Escalation {
+  /** Unique within the node that raised it. */
+  id: string;
+  kind: EscalationKind;
+  title: string;
+  detail: string;
+  /** ISO 8601 timestamp. */
+  raised_at: string;
+}
+
 export type HealthCounts = Record<NodeHealth, number>;
 
 export interface OrgNode {
@@ -48,11 +61,27 @@ export interface OrgNode {
   agents: AgentRef[];
   health: NodeHealth;
   spec_summary: string;
+  /** Open escalations this node raised, oldest first. */
+  escalations: Escalation[];
   /**
    * Health of every node below this one, so a parent can summarize its whole
    * subtree without the client loading it.
    */
   descendant_counts: HealthCounts;
+  /**
+   * Open escalations on this node and every node below it, so a collapsed
+   * parent still shows that something below needs the human.
+   */
+  escalation_count: number;
+}
+
+/** An escalation with the chain of nodes it travelled up. */
+export interface OpenEscalation {
+  /** The node that raised it. */
+  node_id: NodeId;
+  escalation: Escalation;
+  /** Root first, ending at the node that raised it. */
+  path: Array<{ id: NodeId; title: string }>;
 }
 
 export interface Autopsy {
@@ -80,12 +109,20 @@ export interface NodeBlackboard {
 }
 
 /**
- * A snapshot holds the focused node, its ancestors (for the breadcrumb) and
- * its direct reports. Later events are limited to that same set.
+ * A snapshot holds the focused node, its ancestors (for the breadcrumb), its
+ * direct reports and the direct reports of every expanded node, plus every
+ * open escalation at or below the focused node. Node events are limited to
+ * that same set; an `escalations` event carries the whole new list.
  */
 export type OrgEvent =
-  | { type: "snapshot"; focus_id: NodeId; nodes: OrgNode[] }
+  | {
+      type: "snapshot";
+      focus_id: NodeId;
+      nodes: OrgNode[];
+      escalations: OpenEscalation[];
+    }
   | { type: "node_upsert"; node: OrgNode }
-  | { type: "node_removed"; id: NodeId };
+  | { type: "node_removed"; id: NodeId }
+  | { type: "escalations"; escalations: OpenEscalation[] };
 
 export const DIRECTOR_BASE_PATH = "/api/director";

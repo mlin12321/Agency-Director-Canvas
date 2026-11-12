@@ -1,19 +1,10 @@
 import type {
   AgentRole,
+  EscalationKind,
   IsolationMode,
   NodeHealth,
 } from "#/api/director/types";
 import { I18nKey } from "#/i18n/declaration";
-
-/** Most urgent first: this is the order sections appear in the grid. */
-export const HEALTH_ORDER: readonly NodeHealth[] = [
-  "needs_attention",
-  "collision",
-  "negotiating_split",
-  "converging",
-  "done",
-  "pruned",
-];
 
 export const HEALTH_LABEL_KEYS: Record<NodeHealth, I18nKey> = {
   converging: I18nKey.ORG_CHART$HEALTH_CONVERGING,
@@ -45,20 +36,7 @@ export const ISOLATION_LABEL_KEYS: Record<IsolationMode, I18nKey> = {
   shared: I18nKey.ORG_CHART$ISOLATION_SHARED,
 };
 
-/**
- * Swatches that tie a boundary row to its owner's card. There are fewer
- * colors than a team can have reports, so the owner's number is the
- * unambiguous key and the color only a visual aid.
- */
-const OWNER_SWATCH_CLASSES = [
-  "bg-info",
-  "bg-success",
-  "bg-warning",
-  "bg-accent",
-  "bg-danger",
-  "bg-primary",
-] as const;
-
-export function ownerSwatchClass(index: number) {
-  return OWNER_SWATCH_CLASSES[index % OWNER_SWATCH_CLASSES.length];
-}
+export const ESCALATION_LABEL_KEYS: Record<EscalationKind, I18nKey> = {
+  critical_issue: I18nKey.ORG_CHART$ESCALATION_CRITICAL,
+  design_decision: I18nKey.ORG_CHART$ESCALATION_DECISION,
+};

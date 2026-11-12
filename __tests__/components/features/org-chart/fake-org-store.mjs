@@ -1,10 +1,10 @@
 /**
  * Test double for the Agent Server's director org tree. It derives
- * `child_ids` and `descendant_counts` and emits the same events, scoped the
+ * `child_ids`, `descendant_counts` and `escalation_count` and emits the same events, scoped the
  * same way, as `openhands.agent_server.director.org_store` in the SDK, so UI
  * tests can drive realistic event sequences without a server.
  *
- * @import { HealthCounts, NodeHealth, NodeId, OrgEvent, OrgNode } from "../../../../src/api/director/types.ts"
+ * @import { HealthCounts, NodeHealth, NodeId, OpenEscalation, OrgEvent, OrgNode } from "../../../../src/api/director/types.ts"
  */
 
 /** @type {readonly NodeHealth[]} */
@@ -26,7 +26,7 @@ export function emptyHealthCounts() {
 
 /**
  * What a caller supplies; the store fills in the derived fields.
- * @typedef {Omit<OrgNode, "child_ids" | "descendant_counts">} OrgNodeInput
+ * @typedef {Omit<OrgNode, "child_ids" | "descendant_counts" | "escalation_count">} OrgNodeInput
  * @typedef {(event: OrgEvent) => void} OrgListener
  * @typedef {{ event: OrgEvent, id: NodeId, parent_id: NodeId | null }} Emission
  */
@@ -50,7 +50,7 @@ export class OrgStore {
   /** @type {NodeId | null} */
   #rootId = null;
 
-  /** @type {Set<(emission: Emission) => void>} */
+  /** @type {Set<{ deliver: (emission: Emission) => void, announce: () => void }>} */
   #listeners = new Set();
 
   get rootId() {
@@ -142,6 +142,12 @@ export class OrgStore {
       descendant_counts: existing
         ? existing.descendant_counts
         : emptyHealthCounts(),
+      escalation_count:
+        input.escalations.length +
+        this.children(input.id).reduce(
+          (sum, child) => sum + child.escalation_count,
+          0,
+        ),
     };
     this.#nodes.set(node.id, node);
 
@@ -161,6 +167,7 @@ export class OrgStore {
     // A new child changes its parent's `child_ids`, so the parent is always
     // re-announced on insert; above that, only changed rollups are.
     this.#refreshAncestors(node.parent_id, !existing);
+    this.#announceEscalations();
     return node;
   }
 
@@ -208,42 +215,101 @@ export class OrgStore {
     doomed.forEach((gone) => this.#nodes.delete(gone.id));
 
     this.#refreshAncestors(node.parent_id, true);
+    this.#announceEscalations();
     return true;
   }
 
   /**
-   * The focused node, its ancestors and its direct reports.
+   * Every open escalation at or below `focusId`: critical issues first, then
+   * the longest waiting.
    *
    * @param {NodeId} focusId
+   * @returns {OpenEscalation[]}
+   */
+  escalations(focusId) {
+    /** @type {OpenEscalation[]} */
+    const found = [];
+    const focus = this.#nodes.get(focusId);
+    const stack = focus ? [focus] : [];
+    while (stack.length > 0) {
+      const node = /** @type {OrgNode} */ (stack.pop());
+      const path = [...this.ancestors(node.id), node].map(({ id, title }) => ({
+        id,
+        title,
+      }));
+      node.escalations.forEach((escalation) => {
+        found.push({ node_id: node.id, escalation, path });
+      });
+      stack.push(...this.children(node.id).reverse());
+    }
+    const rank = (/** @type {OpenEscalation} */ item) =>
+      item.escalation.kind === "critical_issue" ? 0 : 1;
+    return found.sort(
+      (a, b) =>
+        rank(a) - rank(b) ||
+        a.escalation.raised_at.localeCompare(b.escalation.raised_at),
+    );
+  }
+
+  /**
+   * The focused node, its ancestors, and the direct reports of the focused
+   * node and of every node in `expanded`.
+   *
+   * @param {NodeId} focusId
+   * @param {readonly NodeId[]} [expanded]
    * @returns {Extract<OrgEvent, { type: "snapshot" }> | null}
    */
-  snapshot(focusId) {
+  snapshot(focusId, expanded = []) {
     const focus = this.#nodes.get(focusId);
     if (!focus) return null;
+    /** @type {Map<NodeId, OrgNode>} */
+    const nodes = new Map();
+    [
+      ...this.ancestors(focusId),
+      focus,
+      ...this.children(focusId),
+      ...expanded.flatMap((id) => this.children(id)),
+    ].forEach((node) => nodes.set(node.id, node));
     return {
       type: "snapshot",
       focus_id: focusId,
-      nodes: [...this.ancestors(focusId), focus, ...this.children(focusId)],
+      nodes: [...nodes.values()],
+      escalations: this.escalations(focusId),
     };
   }
 
   /**
-   * Receive events for the nodes a snapshot of `focusId` contains.
+   * Receive events for what a snapshot of `focusId` and `expanded` contains.
    *
    * @param {NodeId} focusId
    * @param {OrgListener} listener
+   * @param {readonly NodeId[]} [expanded]
    * @returns {() => void} Unsubscribe.
    */
-  subscribe(focusId, listener) {
-    /** @param {Emission} emission */
-    const filtered = (emission) => {
-      if (this.#isVisibleFrom(focusId, emission.id, emission.parent_id)) {
-        listener(emission.event);
-      }
+  subscribe(focusId, listener, expanded = []) {
+    let told = JSON.stringify(this.escalations(focusId));
+    const subscription = {
+      /** @param {Emission} emission */
+      deliver: (emission) => {
+        if (
+          this.#isVisibleFrom(focusId, emission.id, emission.parent_id) ||
+          (emission.parent_id !== null && expanded.includes(emission.parent_id))
+        ) {
+          listener(emission.event);
+        }
+      },
+      announce: () => {
+        if (!this.#nodes.has(focusId)) return;
+        const escalations = this.escalations(focusId);
+        const current = JSON.stringify(escalations);
+        if (current === told) return;
+        told = current;
+        listener({ type: "escalations", escalations });
+      },
     };
-    this.#listeners.add(filtered);
+    this.#listeners.add(subscription);
     return () => {
-      this.#listeners.delete(filtered);
+      this.#listeners.delete(subscription);
     };
   }
 
@@ -257,16 +323,18 @@ export class OrgStore {
     return this.ancestors(focusId).some((ancestor) => ancestor.id === id);
   }
 
-  /** @param {OrgNode} node @returns {HealthCounts} */
+  /** @param {OrgNode} node */
   #rollup(node) {
     const counts = emptyHealthCounts();
+    let escalationCount = node.escalations.length;
     this.children(node.id).forEach((child) => {
       counts[child.health] += 1;
       NODE_HEALTHS.forEach((health) => {
         counts[health] += child.descendant_counts[health];
       });
+      escalationCount += child.escalation_count;
     });
-    return counts;
+    return { counts, escalationCount };
   }
 
   /**
@@ -282,10 +350,16 @@ export class OrgStore {
     while (currentId !== null) {
       const current = this.#nodes.get(currentId);
       if (!current) return;
-      const counts = this.#rollup(current);
-      const changed = !sameCounts(counts, current.descendant_counts);
+      const { counts, escalationCount } = this.#rollup(current);
+      const changed =
+        !sameCounts(counts, current.descendant_counts) ||
+        escalationCount !== current.escalation_count;
       const announced = changed
-        ? { ...current, descendant_counts: counts }
+        ? {
+            ...current,
+            descendant_counts: counts,
+            escalation_count: escalationCount,
+          }
         : current;
       if (changed) this.#nodes.set(announced.id, announced);
       if (changed || (first && alwaysAnnounceFirst)) {
@@ -307,7 +381,12 @@ export class OrgStore {
    */
   #emit(event, id, parent_id) {
     [...this.#listeners].forEach((listener) =>
-      listener({ event, id, parent_id }),
+      listener.deliver({ event, id, parent_id }),
     );
+  }
+
+  /** Tell each subscriber whose list of escalations just changed. */
+  #announceEscalations() {
+    [...this.#listeners].forEach((listener) => listener.announce());
   }
 }

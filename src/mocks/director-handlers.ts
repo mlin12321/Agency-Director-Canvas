@@ -6,6 +6,7 @@ import {
   type NodeBlackboard,
   type NodeHealth,
   type NodeId,
+  type OpenEscalation,
   type OrgEvent,
   type OrgNode,
 } from "#/api/director/types";
@@ -13,9 +14,10 @@ import {
 /**
  * MSW handlers for the Agent Server director API, so `npm run dev:mock` renders the
  * org chart without one running. The tree is small and static: one root, a
- * few domains, and a few modules under each.
+ * few domains, a few modules under each, and two open escalations.
  */
 const NODE_QUERY_PARAM = "node";
+const EXPANDED_QUERY_PARAM = "expanded";
 const BASE = `*${DIRECTOR_BASE_PATH}`;
 const ROOT_ID = "root";
 
@@ -37,6 +39,27 @@ const MODULES: Array<{ name: string; health: NodeHealth }> = [
   { name: "worker", health: "collision" },
   { name: "storage", health: "done" },
 ];
+
+const ESCALATIONS: Record<NodeId, OrgNode["escalations"]> = {
+  identity: [
+    {
+      id: "session-tokens",
+      kind: "design_decision",
+      title: "Session tokens: signed JWTs or opaque server-side sessions?",
+      detail: "The api and worker teams disagree.",
+      raised_at: "2026-11-10T09:12:00Z",
+    },
+  ],
+  "payments.worker": [
+    {
+      id: "idempotency-collision",
+      kind: "critical_issue",
+      title: "Idempotency keys collide across retries",
+      detail: "The fix needs a schema change outside this team's boundary.",
+      raised_at: "2026-11-11T16:40:00Z",
+    },
+  ],
+};
 
 function zeroCounts(): HealthCounts {
   return {
@@ -79,9 +102,17 @@ function buildMockTree() {
         agents: POD,
         health: module.health,
         spec_summary: `Implements ${module.name} for ${domain.name}.`,
+        escalations: ESCALATIONS[id] ?? [],
         descendant_counts: zeroCounts(),
+        escalation_count: ESCALATIONS[id]?.length ?? 0,
       });
     });
+    const own = ESCALATIONS[domain.name] ?? [];
+    const below = MODULES.reduce(
+      (sum, module) =>
+        sum + (ESCALATIONS[`${domain.name}.${module.name}`]?.length ?? 0),
+      0,
+    );
     nodes.set(domain.name, {
       id: domain.name,
       parent_id: ROOT_ID,
@@ -94,7 +125,9 @@ function buildMockTree() {
       agents: POD,
       health: domain.health,
       spec_summary: `Interface contracts between the ${domain.name} services.`,
+      escalations: own,
       descendant_counts: { ...moduleCounts },
+      escalation_count: own.length + below,
     });
   });
   nodes.set(ROOT_ID, {
@@ -109,27 +142,68 @@ function buildMockTree() {
     agents: POD,
     health: "converging",
     spec_summary: "Owns cross-domain contracts and the release plan.",
+    escalations: [],
     descendant_counts: rootCounts,
+    escalation_count: Object.values(ESCALATIONS).flat().length,
   });
   return nodes;
 }
 
 const tree = buildMockTree();
 
-function snapshot(focusId: NodeId): OrgEvent | null {
-  const focus = tree.get(focusId);
-  if (!focus) return null;
+function ancestorsOf(node: OrgNode): OrgNode[] {
   const ancestors: OrgNode[] = [];
-  let parent = focus.parent_id === null ? undefined : tree.get(focus.parent_id);
+  let parent = node.parent_id === null ? undefined : tree.get(node.parent_id);
   while (parent) {
     ancestors.unshift(parent);
     parent = parent.parent_id === null ? undefined : tree.get(parent.parent_id);
   }
-  const reports = focus.child_ids.flatMap((id) => tree.get(id) ?? []);
+  return ancestors;
+}
+
+function reportsOf(nodeId: NodeId): OrgNode[] {
+  return (tree.get(nodeId)?.child_ids ?? []).flatMap(
+    (id) => tree.get(id) ?? [],
+  );
+}
+
+/** Open escalations at or below `focus`, critical issues first. */
+function escalationsBelow(focus: OrgNode): OpenEscalation[] {
+  return [...tree.values()]
+    .filter((node) => node === focus || ancestorsOf(node).includes(focus))
+    .flatMap((node) =>
+      node.escalations.map((escalation) => ({
+        node_id: node.id,
+        escalation,
+        path: [...ancestorsOf(node), node].map(({ id, title }) => ({
+          id,
+          title,
+        })),
+      })),
+    )
+    .sort(
+      (a, b) =>
+        Number(a.escalation.kind !== "critical_issue") -
+          Number(b.escalation.kind !== "critical_issue") ||
+        a.escalation.raised_at.localeCompare(b.escalation.raised_at),
+    );
+}
+
+function snapshot(focusId: NodeId, expanded: NodeId[]): OrgEvent | null {
+  const focus = tree.get(focusId);
+  if (!focus) return null;
+  const nodes = new Map<NodeId, OrgNode>();
+  [
+    ...ancestorsOf(focus),
+    focus,
+    ...reportsOf(focusId),
+    ...expanded.flatMap(reportsOf),
+  ].forEach((node) => nodes.set(node.id, node));
   return {
     type: "snapshot",
     focus_id: focusId,
-    nodes: [...ancestors, focus, ...reports],
+    nodes: [...nodes.values()],
+    escalations: escalationsBelow(focus),
   };
 }
 
@@ -145,9 +219,9 @@ function notFound(id: string) {
 
 export const DIRECTOR_HANDLERS = [
   http.get(`${BASE}/org/tree-stream`, ({ request }) => {
-    const focusId =
-      new URL(request.url).searchParams.get(NODE_QUERY_PARAM) ?? ROOT_ID;
-    const event = snapshot(focusId);
+    const params = new URL(request.url).searchParams;
+    const focusId = params.get(NODE_QUERY_PARAM) ?? ROOT_ID;
+    const event = snapshot(focusId, params.getAll(EXPANDED_QUERY_PARAM));
     if (!event) return notFound(focusId);
 
     // One snapshot, then the stream stays open like the real one does.

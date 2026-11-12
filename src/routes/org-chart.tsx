@@ -1,7 +1,7 @@
 import { useParams } from "react-router";
-import { OrgNodeWorkspace } from "#/components/features/org-chart/org-node-workspace";
+import { OrgChartView } from "#/components/features/org-chart/org-chart-view";
 
 export default function OrgChartRoute() {
   const { nodeId } = useParams();
-  return <OrgNodeWorkspace nodeId={nodeId ?? null} />;
+  return <OrgChartView nodeId={nodeId ?? null} />;
 }

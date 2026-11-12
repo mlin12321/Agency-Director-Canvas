@@ -1,12 +1,15 @@
 import React from "react";
 import { X } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import type { AgentRef, OrgNode } from "#/api/director/types";
+import type { AgentRole, OrgNode } from "#/api/director/types";
+import { NavigationLink } from "#/components/shared/navigation-link";
+import { orgNodePath } from "#/constants/org-chart";
 import {
   NavigationProvider,
   useNavigation,
 } from "#/context/navigation-context";
 import { I18nKey } from "#/i18n/declaration";
+import { cn } from "#/utils/utils";
 import { BoundaryMemory } from "./boundary-memory";
 import { ROLE_LABEL_KEYS } from "./org-chart-presentation";
 
@@ -40,18 +43,25 @@ function InspectedConversation({ conversationId }: { conversationId: string }) {
 
 interface AgentInspectorDrawerProps {
   node: OrgNode;
-  agent: AgentRef;
+  /** Whether the node is already the top of the chart. */
+  isTop: boolean;
   onClose: () => void;
 }
 
+/** One team's details: its boundary memory and its agents' conversations. */
 export function AgentInspectorDrawer({
   node,
-  agent,
+  isTop,
   onClose,
 }: AgentInspectorDrawerProps) {
   const { t } = useTranslation("openhands");
-  const roleLabel = t(ROLE_LABEL_KEYS[agent.role]);
   const titleId = React.useId();
+  // Tracked by role so the drawer follows the agent across live updates.
+  const [role, setRole] = React.useState<AgentRole | null>(null);
+  const agent =
+    node.agents.find((candidate) => candidate.role === role) ??
+    node.agents.at(0) ??
+    null;
 
   React.useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -68,13 +78,20 @@ export function AgentInspectorDrawer({
       className="flex h-full w-1/2 max-w-2xl shrink-0 flex-col border-l border-border bg-surface"
     >
       <div className="flex items-center justify-between gap-2 border-b border-border p-3">
-        <h2 id={titleId} className="min-w-0 truncate text-sm text-contrast">
-          <span className="font-medium">{roleLabel}</span>
-          <span className="text-muted">
-            {" · "}
-            {node.title}
-          </span>
+        <h2
+          id={titleId}
+          className="min-w-0 truncate text-sm font-medium text-contrast"
+        >
+          {node.title}
         </h2>
+        {!isTop && node.child_ids.length > 0 ? (
+          <NavigationLink
+            to={orgNodePath(node.id)}
+            className="ml-auto shrink-0 text-xs text-link hover:underline"
+          >
+            {t(I18nKey.ORG_CHART$VIEW_AS_ROOT)}
+          </NavigationLink>
+        ) : null}
         <button
           type="button"
           onClick={onClose}
@@ -89,8 +106,30 @@ export function AgentInspectorDrawer({
         <BoundaryMemory node={node} />
       </div>
 
+      <div
+        role="group"
+        aria-label={t(I18nKey.ORG_CHART$AGENTS)}
+        className="flex flex-wrap gap-2 border-b border-border p-3"
+      >
+        {node.agents.map((candidate) => (
+          <button
+            key={candidate.role}
+            type="button"
+            aria-pressed={candidate.role === agent?.role}
+            onClick={() => setRole(candidate.role)}
+            className={cn(
+              "flex items-center gap-2 rounded-md border border-border px-2.5 py-1 text-sm text-contrast hover:bg-surface-raised",
+              candidate.role === agent?.role ? "bg-surface-raised" : null,
+            )}
+          >
+            {t(ROLE_LABEL_KEYS[candidate.role])}
+            <span className="text-xs text-muted">{candidate.status}</span>
+          </button>
+        ))}
+      </div>
+
       <div className="min-h-0 flex-1">
-        {agent.conversation_id ? (
+        {agent?.conversation_id ? (
           <InspectedConversation
             key={agent.conversation_id}
             conversationId={agent.conversation_id}
