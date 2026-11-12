@@ -4,23 +4,21 @@
  * same way, as `openhands.agent_server.director.org_store` in the SDK, so UI
  * tests can drive realistic event sequences without a server.
  *
- * @import { HealthCounts, NodeHealth, NodeId, OpenEscalation, OrgEvent, OrgNode } from "../../../../src/api/director/types.ts"
+ * @import { StatusCounts, NodeStatus, NodeId, OpenEscalation, OrgEvent, OrgNode } from "../../../../src/api/director/types.ts"
  */
 
-/** @type {readonly NodeHealth[]} */
-export const NODE_HEALTHS = Object.freeze([
-  "converging",
-  "negotiating_split",
-  "collision",
-  "needs_attention",
-  "pruned",
+/** @type {readonly NodeStatus[]} */
+export const NODE_STATUSES = Object.freeze([
+  "idle",
+  "working",
   "done",
+  "blocked",
 ]);
 
-/** @returns {HealthCounts} */
-export function emptyHealthCounts() {
-  return /** @type {HealthCounts} */ (
-    Object.fromEntries(NODE_HEALTHS.map((health) => [health, 0]))
+/** @returns {StatusCounts} */
+export function emptyStatusCounts() {
+  return /** @type {StatusCounts} */ (
+    Object.fromEntries(NODE_STATUSES.map((status) => [status, 0]))
   );
 }
 
@@ -38,9 +36,9 @@ export class OrgStoreError extends Error {
   }
 }
 
-/** @param {HealthCounts} a @param {HealthCounts} b */
+/** @param {StatusCounts} a @param {StatusCounts} b */
 function sameCounts(a, b) {
-  return NODE_HEALTHS.every((health) => a[health] === b[health]);
+  return NODE_STATUSES.every((status) => a[status] === b[status]);
 }
 
 /** @param {Pick<OrgNode, "escalations">} node */
@@ -147,7 +145,7 @@ export class OrgStore {
       child_ids: existing ? existing.child_ids : [],
       descendant_counts: existing
         ? existing.descendant_counts
-        : emptyHealthCounts(),
+        : emptyStatusCounts(),
       escalation_count:
         waitingOnHuman(input) +
         this.children(input.id).reduce(
@@ -348,12 +346,12 @@ export class OrgStore {
 
   /** @param {OrgNode} node */
   #rollup(node) {
-    const counts = emptyHealthCounts();
+    const counts = emptyStatusCounts();
     let escalationCount = waitingOnHuman(node);
     this.children(node.id).forEach((child) => {
-      counts[child.health] += 1;
-      NODE_HEALTHS.forEach((health) => {
-        counts[health] += child.descendant_counts[health];
+      counts[child.status] += 1;
+      NODE_STATUSES.forEach((status) => {
+        counts[status] += child.descendant_counts[status];
       });
       escalationCount += child.escalation_count;
     });

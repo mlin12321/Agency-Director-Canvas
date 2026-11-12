@@ -20,8 +20,8 @@ interface NodeCardProps {
   centerInScroller?: boolean;
 }
 
-// Every card is the same size wherever it is drawn. A chart that does not
-// fit is scaled as a whole; cards are never resized one by one.
+// Every card is the same size wherever it is drawn. Fitting a chart to the
+// page zooms it as a whole.
 const MAIN_CLASS =
   "flex size-full flex-col items-start justify-center gap-0.5 rounded-lg px-2 text-left hover:bg-surface-raised";
 

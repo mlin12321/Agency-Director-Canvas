@@ -2,9 +2,9 @@ import { http, HttpResponse } from "msw";
 import {
   DIRECTOR_BASE_PATH,
   type AgentRef,
-  type HealthCounts,
+  type StatusCounts,
   type NodeBlackboard,
-  type NodeHealth,
+  type NodeStatus,
   type NodeId,
   type OpenEscalation,
   type OrgEvent,
@@ -23,21 +23,21 @@ const BASE = `*${DIRECTOR_BASE_PATH}`;
 const ROOT_ID = "root";
 
 const POD: AgentRef[] = [
-  { role: "ic", conversation_id: null, status: "running" },
+  { role: "ic", conversation_id: null, status: "working" },
   { role: "manager", conversation_id: null, status: "idle" },
 ];
 
-const DOMAINS: Array<{ name: string; health: NodeHealth }> = [
-  { name: "platform", health: "converging" },
-  { name: "payments", health: "needs_attention" },
-  { name: "identity", health: "negotiating_split" },
-  { name: "search", health: "done" },
+const DOMAINS: Array<{ name: string; status: NodeStatus }> = [
+  { name: "platform", status: "working" },
+  { name: "payments", status: "blocked" },
+  { name: "identity", status: "idle" },
+  { name: "search", status: "done" },
 ];
 
-const MODULES: Array<{ name: string; health: NodeHealth }> = [
-  { name: "api", health: "converging" },
-  { name: "worker", health: "collision" },
-  { name: "storage", health: "done" },
+const MODULES: Array<{ name: string; status: NodeStatus }> = [
+  { name: "api", status: "working" },
+  { name: "worker", status: "blocked" },
+  { name: "storage", status: "done" },
 ];
 
 const ESCALATIONS: Record<NodeId, OrgNode["escalations"]> = {
@@ -82,30 +82,28 @@ function waitingOnHuman(id: NodeId) {
   ).length;
 }
 
-function zeroCounts(): HealthCounts {
+function zeroCounts(): StatusCounts {
   return {
-    converging: 0,
-    negotiating_split: 0,
-    collision: 0,
-    needs_attention: 0,
-    pruned: 0,
+    idle: 0,
+    working: 0,
     done: 0,
+    blocked: 0,
   };
 }
 
 function buildMockTree() {
   const nodes = new Map<NodeId, OrgNode>();
   const moduleCounts = zeroCounts();
-  MODULES.forEach(({ health }) => {
-    moduleCounts[health] += 1;
+  MODULES.forEach(({ status }) => {
+    moduleCounts[status] += 1;
   });
 
   const rootCounts = zeroCounts();
   DOMAINS.forEach((domain) => {
     const path = `services/${domain.name}`;
-    rootCounts[domain.health] += 1;
+    rootCounts[domain.status] += 1;
     MODULES.forEach((module) => {
-      rootCounts[module.health] += 1;
+      rootCounts[module.status] += 1;
       const id = `${domain.name}.${module.name}`;
       nodes.set(id, {
         id,
@@ -121,7 +119,7 @@ function buildMockTree() {
         worktree_path: `.worktrees/${domain.name}`,
         branch: `agents/${domain.name}`,
         agents: POD,
-        health: module.health,
+        status: module.status,
         spec_summary: `Implements ${module.name} for ${domain.name}.`,
         escalations: ESCALATIONS[id] ?? [],
         descendant_counts: zeroCounts(),
@@ -143,7 +141,7 @@ function buildMockTree() {
       worktree_path: `.worktrees/${domain.name}`,
       branch: `agents/${domain.name}`,
       agents: POD,
-      health: domain.health,
+      status: domain.status,
       spec_summary: `Interface contracts between the ${domain.name} services.`,
       escalations: own,
       descendant_counts: { ...moduleCounts },
@@ -160,7 +158,7 @@ function buildMockTree() {
     worktree_path: ".",
     branch: "main",
     agents: POD,
-    health: "converging",
+    status: "working",
     spec_summary: "Owns cross-domain contracts and the release plan.",
     escalations: [],
     descendant_counts: rootCounts,

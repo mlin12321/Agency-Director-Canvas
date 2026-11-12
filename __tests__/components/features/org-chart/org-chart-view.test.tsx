@@ -6,7 +6,7 @@ import type {
   AgentRef,
   Escalation,
   NodeBlackboard,
-  NodeHealth,
+  NodeStatus,
   OrgEvent,
 } from "#/api/director/types";
 import { subscribeOrgTree } from "#/api/director/director-client";
@@ -28,14 +28,14 @@ vi.mock("#/routes/conversation", () => ({
 }));
 
 const POD: AgentRef[] = [
-  { role: "ic", conversation_id: null, status: "running" },
+  { role: "ic", conversation_id: null, status: "working" },
   { role: "manager", conversation_id: "conv-manager", status: "idle" },
 ];
 
 function input(
   id: string,
   parentId: string | null,
-  health: NodeHealth,
+  status: NodeStatus,
   path: string,
   escalations: Escalation[] = [],
 ): OrgNodeInput {
@@ -48,7 +48,7 @@ function input(
     worktree_path: ".",
     branch: `agents/${id}`,
     agents: POD,
-    health,
+    status,
     spec_summary: `Spec for ${id}`,
     escalations,
   };
@@ -157,14 +157,12 @@ beforeEach(() => {
   streams = [];
   streamRequests = [];
   store = new OrgStore();
-  store.upsert(input("root", null, "converging", ""));
-  store.upsert(input("auth", "root", "converging", "services/auth"));
+  store.upsert(input("root", null, "working", ""));
+  store.upsert(input("auth", "root", "working", "services/auth"));
   store.upsert(
-    input("billing", "root", "needs_attention", "services/billing", [
-      DOUBLE_CHARGE,
-    ]),
+    input("billing", "root", "blocked", "services/billing", [DOUBLE_CHARGE]),
   );
-  store.upsert(input("search", "root", "converging", "services/search"));
+  store.upsert(input("search", "root", "working", "services/search"));
   store.upsert(
     input("oauth", "auth", "done", "services/auth/oauth", [TOKEN_DECISION]),
   );
@@ -399,7 +397,7 @@ describe("OrgChartView", () => {
       renderWithProviders(<OrgChartView nodeId={null} />);
       await findCard("root");
 
-      expect(screen.queryByText(/ORG_CHART\$HEALTH_/)).toBeNull();
+      expect(screen.queryByText(/ORG_CHART\$STATUS_/)).toBeNull();
       expect(screen.queryByText(/services\/auth/)).toBeNull();
       expect(screen.queryByText(/ORG_CHART\$ISOLATION_/)).toBeNull();
       expect(screen.queryByText("Spec for auth")).toBeNull();
@@ -421,7 +419,7 @@ describe("OrgChartView", () => {
       expect(within(tip).getByText("oauth team")).toBeInTheDocument();
       expect(within(tip).getByText("Spec for oauth")).toBeInTheDocument();
       expect(
-        within(tip).getByText("ORG_CHART$HEALTH_DONE"),
+        within(tip).getByText("ORG_CHART$STATUS_DONE"),
       ).toBeInTheDocument();
       expect(within(tip).getByText("services/auth/oauth")).toBeInTheDocument();
       expect(
@@ -433,7 +431,7 @@ describe("OrgChartView", () => {
       expect(within(tip).getByText("src/types/**")).toBeInTheDocument();
       expect(
         within(tip).getByText(
-          "ORG_CHART$ROLE_IC (running), ORG_CHART$ROLE_MANAGER (idle)",
+          "ORG_CHART$ROLE_IC (working), ORG_CHART$ROLE_MANAGER (idle)",
         ),
       ).toBeInTheDocument();
       // What the team sent up, and that a team above still has it.
@@ -627,9 +625,7 @@ describe("OrgChartView", () => {
       renderWithProviders(<OrgChartView nodeId={null} />);
       await findCard("root");
 
-      store.upsert(
-        input("growth", "root", "negotiating_split", "services/growth"),
-      );
+      store.upsert(input("growth", "root", "idle", "services/growth"));
       expect(await findCard("growth")).toBeInTheDocument();
 
       store.remove("billing");
@@ -643,7 +639,7 @@ describe("OrgChartView", () => {
       renderWithProviders(<OrgChartView nodeId={null} />);
       await findCard("root");
 
-      store.upsert(input("saml", "auth", "converging", "services/auth/saml"));
+      store.upsert(input("saml", "auth", "working", "services/auth/saml"));
       await showWholeOrg(user);
       await findCard("saml");
       store.upsert(input("device", "oauth", "done", "services/auth/oauth/d"));
@@ -870,7 +866,7 @@ describe("OrgChartView", () => {
       await waitFor(() => expect(badge("auth")).toBe("1"));
       expect(badge("root")).toBe("2");
 
-      store.upsert(input("billing", "root", "converging", "services/billing"));
+      store.upsert(input("billing", "root", "working", "services/billing"));
 
       await waitFor(() =>
         expect(
@@ -881,7 +877,7 @@ describe("OrgChartView", () => {
     });
 
     it("says so when nothing waits on the human", async () => {
-      store.upsert(input("billing", "root", "converging", "services/billing"));
+      store.upsert(input("billing", "root", "working", "services/billing"));
 
       renderWithProviders(<OrgChartView nodeId={null} />);
       await findCard("root");

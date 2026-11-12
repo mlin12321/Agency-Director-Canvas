@@ -9,30 +9,34 @@ const team = (reports: number, hasSubTeams = false, hasParent = true) => ({
 const ROOMY = { width: 1100, height: 500 };
 
 describe("fitFocusedChart", () => {
-  it("keeps cards at their size and puts the reports in one row when they fit", () => {
-    expect(fitFocusedChart(team(6, true), ROOMY)).toEqual({
-      columns: 6,
-      scale: 1,
-    });
+  it("zooms a team to the width it has when one row is the largest it gets", () => {
+    // Six in a row are 1040 wide and 197 tall.
+    const fit = fitFocusedChart(team(6, true), { width: 1300, height: 300 });
+
+    expect(fit.columns).toBe(6);
+    expect(fit.scale).toBeCloseTo(1.25);
   });
 
-  it("uses the fewest rows that fit, evened out, before it shrinks anything", () => {
-    // Six fit in a row here; fifteen take three rows of five.
-    expect(fitFocusedChart(team(15), ROOMY)).toEqual({ columns: 5, scale: 1 });
+  it("wraps the reports into rows when that makes the team larger", () => {
+    // One row of fifteen would be 0.42; four rows of four are 688 by 389.
+    const fit = fitFocusedChart(team(15), ROOMY);
+
+    expect(fit.columns).toBe(4);
+    expect(fit.scale).toBeCloseTo(500 / 389);
   });
 
-  it("shrinks the chart only when no arrangement fits, and never enlarges it", () => {
+  it("enlarges a small team to twice its size and no further, in one row", () => {
+    const vast = { width: 4000, height: 3000 };
+
+    expect(fitFocusedChart(team(0), vast)).toEqual({ columns: 1, scale: 2 });
+    expect(fitFocusedChart(team(3), vast)).toEqual({ columns: 3, scale: 2 });
+  });
+
+  it("shrinks a team that does not fit at its own size", () => {
     const tight = fitFocusedChart(team(15), { width: 700, height: 250 });
+
     expect(tight.scale).toBeLessThan(1);
     expect(tight.scale).toBeGreaterThanOrEqual(0.4);
-
-    expect(fitFocusedChart(team(0), { width: 4000, height: 3000 })).toEqual({
-      columns: 1,
-      scale: 1,
-    });
-    expect(fitFocusedChart(team(2), { width: 4000, height: 3000 }).scale).toBe(
-      1,
-    );
   });
 
   it("shrinks a team without reports to a space smaller than its card", () => {
@@ -41,7 +45,7 @@ describe("fitFocusedChart", () => {
     ).toEqual({ columns: 1, scale: 0.5 });
   });
 
-  it("stops shrinking while names are still readable and lets the chart scroll", () => {
+  it("stops shrinking while names are readable and lets the chart scroll", () => {
     const fit = fitFocusedChart(team(1000, true), ROOMY);
 
     expect(fit.scale).toBe(0.4);
@@ -49,7 +53,7 @@ describe("fitFocusedChart", () => {
     expect(fit.columns).toBe(15);
   });
 
-  it("draws at full size until the space is known", () => {
+  it("does not zoom until the space is known", () => {
     expect(fitFocusedChart(team(15), { width: 0, height: 0 })).toEqual({
       columns: 15,
       scale: 1,

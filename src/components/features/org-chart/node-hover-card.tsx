@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import type { NodeId, OrgNode } from "#/api/director/types";
 import { I18nKey } from "#/i18n/declaration";
-import { HealthBadge } from "./health-badge";
+import { StatusBadge } from "./status-badge";
 import {
   ESCALATION_LABEL_KEYS,
   ISOLATION_LABEL_KEYS,
@@ -45,7 +45,7 @@ export function NodeHoverCard({ node, titleOf }: NodeHoverCardProps) {
       ) : null}
       <dl className="flex flex-col gap-1">
         <Row label={t(I18nKey.ORG_CHART$STATUS)}>
-          <HealthBadge health={node.health} />
+          <StatusBadge status={node.status} />
         </Row>
         <Row label={t(I18nKey.ORG_CHART$BOUNDARY)}>
           <code className="break-all">

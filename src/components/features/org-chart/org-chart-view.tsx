@@ -48,7 +48,7 @@ function ancestorsOf(node: OrgNode, nodes: ReadonlyMap<NodeId, OrgNode>) {
 }
 
 /** Kept free on each axis around one team's chart: the padding and more. */
-const CHART_MARGIN = 96;
+const CHART_MARGIN = 48;
 
 /**
  * An org chart of agent teams. It is on one team at a time and draws either
@@ -124,8 +124,8 @@ export function OrgChartView({ nodeId }: OrgChartViewProps) {
   const stale = status === "reconnecting" || status === "unavailable";
   const openDetails = () => setDetailsId(current.id);
   const reports = current.child_ids.flatMap((id) => nodes.get(id) ?? []);
-  // One team is drawn at its normal size and shrunk only when it would not
-  // fit. The whole org is never fitted: it scrolls.
+  // One team is zoomed to be as large as fits. The whole org is not fitted:
+  // it scrolls.
   const fit = full
     ? { columns: 1, scale: 1 }
     : fitFocusedChart(
@@ -162,8 +162,8 @@ export function OrgChartView({ nodeId }: OrgChartViewProps) {
           <div
             className={
               full
-                ? "flex min-h-full w-max min-w-full items-center justify-center p-6"
-                : "flex min-h-full w-full items-center justify-center p-6"
+                ? "flex min-h-full w-max min-w-full items-center justify-center p-4"
+                : "flex min-h-full w-full items-center justify-center p-4"
             }
           >
             <div

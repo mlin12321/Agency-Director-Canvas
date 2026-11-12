@@ -2,26 +2,22 @@ import type {
   AgentRole,
   EscalationKind,
   IsolationMode,
-  NodeHealth,
+  NodeStatus,
 } from "#/api/director/types";
 import { I18nKey } from "#/i18n/declaration";
 
-export const HEALTH_LABEL_KEYS: Record<NodeHealth, I18nKey> = {
-  converging: I18nKey.ORG_CHART$HEALTH_CONVERGING,
-  negotiating_split: I18nKey.ORG_CHART$HEALTH_NEGOTIATING_SPLIT,
-  collision: I18nKey.ORG_CHART$HEALTH_COLLISION,
-  needs_attention: I18nKey.ORG_CHART$HEALTH_NEEDS_ATTENTION,
-  pruned: I18nKey.ORG_CHART$HEALTH_PRUNED,
-  done: I18nKey.ORG_CHART$HEALTH_DONE,
+export const STATUS_LABEL_KEYS: Record<NodeStatus, I18nKey> = {
+  idle: I18nKey.ORG_CHART$STATUS_IDLE,
+  working: I18nKey.ORG_CHART$STATUS_WORKING,
+  done: I18nKey.ORG_CHART$STATUS_DONE,
+  blocked: I18nKey.ORG_CHART$STATUS_BLOCKED,
 };
 
-export const HEALTH_DOT_CLASSES: Record<NodeHealth, string> = {
-  converging: "bg-info",
-  negotiating_split: "bg-accent",
-  collision: "bg-danger",
-  needs_attention: "bg-warning",
-  pruned: "bg-muted",
+export const STATUS_DOT_CLASSES: Record<NodeStatus, string> = {
+  idle: "bg-muted",
+  working: "bg-info",
   done: "bg-success",
+  blocked: "bg-danger",
 };
 
 export const ROLE_LABEL_KEYS: Record<AgentRole, I18nKey> = {

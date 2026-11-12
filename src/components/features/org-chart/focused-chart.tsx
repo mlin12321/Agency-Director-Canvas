@@ -30,32 +30,34 @@ const DOWN_MARKER = 24;
 
 /** Below this the names stop being readable; the chart scrolls instead. */
 const MIN_SCALE = 0.4;
+/** A small team is enlarged up to this, not until it fills the space. */
+const MAX_SCALE = 2;
 
 interface FocusedChartFit {
   columns: number;
-  /** 1, or less when the chart has to shrink to fit. Never more. */
+  /** How much the chart is zoomed, between `MIN_SCALE` and `MAX_SCALE`. */
   scale: number;
 }
 
 /**
- * How many reports to put in a row, and how far to shrink the chart, so
- * that a team and its reports fit in a space of the given size. Cards keep
- * their size whenever some arrangement fits; of those, the one with the
- * fewest rows wins, and its rows are evened out.
+ * How many reports to put in a row, and how much to zoom the chart, so that
+ * a team and its reports are as large as fits in a space of the given size.
+ * Of the arrangements that come out equally large, the one with the fewest
+ * rows wins, and its rows are evened out.
  */
 export function fitFocusedChart(
   chart: { reports: number; hasParent: boolean; hasSubTeams: boolean },
   space: { width: number; height: number },
 ): FocusedChartFit {
   const count = chart.reports;
-  // Not measured yet (or not measurable): a single row at full size.
+  // Not measured yet (or not measurable): a single row, not zoomed.
   if (space.width <= 0 || space.height <= 0 || count === 0) {
     const height = (chart.hasParent ? UP_MARKER : 0) + CARD_HEIGHT;
     const known = space.width > 0 && space.height > 0;
     return {
       columns: Math.max(1, count),
       scale: known
-        ? Math.min(1, space.width / CARD_WIDTH, space.height / height)
+        ? Math.min(MAX_SCALE, space.width / CARD_WIDTH, space.height / height)
         : 1,
     };
   }
@@ -71,7 +73,11 @@ export function fitFocusedChart(
       TEAM_TO_REPORTS +
       rows * rowHeight +
       (rows - 1) * GAP;
-    const scale = Math.min(1, space.width / width, space.height / height);
+    const scale = Math.min(
+      MAX_SCALE,
+      space.width / width,
+      space.height / height,
+    );
     if (
       best === null ||
       scale > best.scale ||

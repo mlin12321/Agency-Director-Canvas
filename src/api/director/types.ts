@@ -7,18 +7,13 @@
 export type NodeId = string;
 
 /**
- * A pod has an IC and a Manager. Whether an IC leads or does the work
- * depends on the team it is seen from, so neither is a role.
+ * A pod has an IC and a Manager. A team's IC leads that team, is a report
+ * of the team above, and does the code work in its boundary that no
+ * sub-team has taken on.
  */
 export type AgentRole = "ic" | "manager";
 
-export type NodeHealth =
-  | "converging"
-  | "negotiating_split"
-  | "collision"
-  | "needs_attention"
-  | "pruned"
-  | "done";
+export type NodeStatus = "idle" | "working" | "done" | "blocked";
 
 /** `worktree`: own git worktree. `shared`: same directory as the parent. */
 export type IsolationMode = "worktree" | "shared";
@@ -68,7 +63,7 @@ export interface Escalation {
   handoffs: EscalationHandoff[];
 }
 
-export type HealthCounts = Record<NodeHealth, number>;
+export type StatusCounts = Record<NodeStatus, number>;
 
 export interface OrgNode {
   id: NodeId;
@@ -80,15 +75,15 @@ export interface OrgNode {
   worktree_path: string;
   branch: string;
   agents: AgentRef[];
-  health: NodeHealth;
+  status: NodeStatus;
   spec_summary: string;
   /** Open escalations this node raised, wherever above they are held. */
   escalations: Escalation[];
   /**
-   * Health of every node below this one, so a parent can summarize its whole
+   * Status of every node below this one, so a parent can summarize its whole
    * subtree without the client loading it.
    */
-  descendant_counts: HealthCounts;
+  descendant_counts: StatusCounts;
   /** Escalations from this node or below that wait on the human. */
   escalation_count: number;
 }
