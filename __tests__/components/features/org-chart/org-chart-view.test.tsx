@@ -318,16 +318,16 @@ describe("OrgChartView", () => {
       expect(teamLink("a/b c")).toHaveAttribute("href", "/org/a%2Fb%20c");
     });
 
-    it("draws a line under each report that has sub-teams, and no other", async () => {
+    it("marks each report that has sub-teams with an ellipsis below it, and no other", async () => {
       renderWithProviders(<OrgChartView nodeId={null} />);
       await findCard("root");
 
-      const hasLine = (id: string) =>
+      const hasMore = (id: string) =>
         card(id).closest("li")?.querySelector("[data-has-sub-teams]") !== null;
 
-      expect(hasLine("auth")).toBe(true);
-      expect(hasLine("billing")).toBe(false);
-      expect(hasLine("search")).toBe(false);
+      expect(hasMore("auth")).toBe(true);
+      expect(hasMore("billing")).toBe(false);
+      expect(hasMore("search")).toBe(false);
     });
 
     it("leads up to the team above only when there is one", async () => {
@@ -380,6 +380,18 @@ describe("OrgChartView", () => {
       expect(within(trail).getByText("oauth team")).toHaveAttribute(
         "aria-current",
         "page",
+      );
+    });
+
+    it("says on each card how many sub-teams the team has", async () => {
+      renderWithProviders(<OrgChartView nodeId={null} />);
+      await findCard("root");
+
+      const subTeams = (id: string) =>
+        within(card(id)).queryByText("ORG_CHART$SUB_TEAMS") !== null;
+
+      expect([subTeams("root"), subTeams("auth"), subTeams("billing")]).toEqual(
+        [true, true, false],
       );
     });
 

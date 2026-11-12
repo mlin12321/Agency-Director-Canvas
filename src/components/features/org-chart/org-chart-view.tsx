@@ -122,19 +122,19 @@ export function OrgChartView({ nodeId }: OrgChartViewProps) {
           aria-label={t(I18nKey.ORG_CHART$NAV)}
           className="min-h-0 flex-1 overflow-auto rounded-xl border border-border"
         >
-          {/* Whatever is drawn sits in the middle of the page, both ways,
-              and scrolls once it is larger than the page. */}
+          {/* One team fills the chart. The whole org sits in the middle of
+              it. Either scrolls once it is larger than the chart. */}
           <div
             className={
               full
                 ? "flex min-h-full w-max min-w-full items-center justify-center p-6"
-                : "flex min-h-full w-full items-center justify-center p-6"
+                : "flex min-h-full w-full p-4"
             }
           >
             <div
               data-testid="org-chart-zoom"
               style={{ "--org-chart-zoom": zoom } as React.CSSProperties}
-              className={cn("org-chart-zoom", full || "w-full")}
+              className={cn("org-chart-zoom", full || "flex w-full")}
             >
               {full ? (
                 <OrgTree

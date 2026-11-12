@@ -5,10 +5,12 @@ card is a team: a pod of agents (Lead IC, Manager, Reviewer, and a Worker on
 leaf teams) that owns one boundary of the repository.
 
 The page is always on one team (`/org/<id>`; `/org` is the root). By default
-it draws only that team and its direct reports, centered in the chart area. A
-line with a chevron above the team says there is a team above it, and a short
-line under a report says that report has sub-teams of its own. Clicking a
-report moves the page to it. **Whole org** draws every team instead, with the
+it draws only that team and its direct reports, and they fill the chart area:
+the team's card across the top, its reports below it, as many to a row as fit.
+An ellipsis (`…`) above the team says there is a team above it, and one under
+a report says that report has sub-teams of its own. Clicking a report moves
+the page to it. Each card shows the team's name and how many sub-teams it
+has; a long name wraps rather than widening the card. **Whole org** draws every team instead, with the
 team the page is on outlined and brought to the middle. The zoom control
 scales either view. The view and the zoom are remembered in the browser.
 
@@ -38,9 +40,9 @@ Server: F02, F25.
 
 ## Sub-features
 
-- `F30.open-root`: `/org` draws the root team's card and one card per direct report, nothing deeper, and no team's status or boundary.
+- `F30.open-root`: `/org` draws the root team's card and one card per direct report, nothing deeper, and no team's status or boundary. Together the cards fill the chart area.
 - `F30.navigate`: clicking a report moves the page to `/org/<id>`, which draws that team and its direct reports only, with a breadcrumb of its ancestors and a link up to the team above. A team without reports is drawn alone.
-- `F30.sub-team-lines`: a report that has sub-teams has a line below its card; one that has none does not. The root has no link up.
+- `F30.sub-team-lines`: a report that has sub-teams has an ellipsis below its card; one that has none does not. A team that has a team above it has an ellipsis above its card, which is the link up; the root has none.
 - `F30.hover`: hovering a card (or focusing it with the keyboard) shows that team's summary, status, boundary directory and worktree mode, writable and read-only globs, and agents.
 - `F30.whole-org`: **Whole org** draws every team; the team the page is on is outlined and scrolled to the middle, and clicking another card moves the page (and the outline) to it. **This team** goes back.
 - `F30.zoom`: **Zoom out** and **Zoom in** scale the chart in steps of 10% between 30% and 200%; the button between them shows the zoom and resets it to 100%. The zoom and the view survive a reload.
@@ -57,7 +59,7 @@ Server: F02, F25.
 
 - Sidebar → **Org chart** (`sidebar-org-chart-link`), shown for local backends only.
 - Direct URL: `/org` for the root team, `/org/<id>` for any other.
-- A card, the link above the current team, a breadcrumb link, or an escalation.
+- A card, the ellipsis above the current team, a breadcrumb link, or an escalation.
 
 ## Driving it with control-openhands
 
