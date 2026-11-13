@@ -136,6 +136,17 @@ export const DirectorClient = {
     return postJson<OrgSync>(`${ORG_PATH}/push`, { remote });
   },
 
+  /**
+   * Start afresh a team whose agents have no conversation on this server,
+   * on the work its branch has. Its IC starts like the IC of the team above.
+   */
+  startAgain(nodeId: NodeId) {
+    return postJson<OrgNode>(
+      `${ORG_PATH}/nodes/${encodeURIComponent(nodeId)}/start_again`,
+      {},
+    );
+  },
+
   /** The merge that waits for choices; `null` when none does. */
   getMerge() {
     return requestJson<OrgMerge | null>(`${ORG_PATH}/merge`);

@@ -8,6 +8,7 @@ import type {
   OpenEscalation,
   OrgEvent,
   OrgNode,
+  PauseReason,
 } from "#/api/director/types";
 
 interface OrgTreeState {
@@ -15,6 +16,13 @@ interface OrgTreeState {
   focusId: NodeId | null;
   nodes: ReadonlyMap<NodeId, OrgNode>;
   escalations: OpenEscalation[];
+  orgState: OrgRunState | null;
+}
+
+/** Whether the org is paused, and whether a pull waits for choices. */
+export interface OrgRunState {
+  paused: PauseReason | null;
+  merging: boolean;
 }
 
 type OrgTreeAction =
@@ -27,6 +35,7 @@ const INITIAL_STATE: OrgTreeState = {
   focusId: null,
   nodes: new Map(),
   escalations: [],
+  orgState: null,
 };
 
 function reduce(state: OrgTreeState, action: OrgTreeAction): OrgTreeState {
@@ -54,6 +63,15 @@ function reduce(state: OrgTreeState, action: OrgTreeAction): OrgTreeState {
         focusId: event.focus_id,
         nodes: new Map(event.nodes.map((node) => [node.id, node])),
         escalations: event.escalations,
+        orgState:
+          event.paused === undefined
+            ? null
+            : { paused: event.paused, merging: event.merging ?? false },
+      };
+    case "org_state":
+      return {
+        ...state,
+        orgState: { paused: event.paused, merging: event.merging },
       };
     case "node_upsert": {
       const nodes = new Map(state.nodes);
@@ -84,6 +102,8 @@ export interface OrgTreeView {
   nodes: ReadonlyMap<NodeId, OrgNode>;
   /** Every escalation in the tree that waits on the human. */
   escalations: OpenEscalation[];
+  /** As the stream last said it; `null` when the server does not say. */
+  orgState: OrgRunState | null;
 }
 
 /**

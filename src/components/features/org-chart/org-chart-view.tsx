@@ -1,8 +1,8 @@
 import React from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { DirectorClient } from "#/api/director/director-client";
-import type { NodeId, OrgNode } from "#/api/director/types";
+import type { NodeId, OrgNode, OrgSummary } from "#/api/director/types";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import { ORG_CHART_PATH, orgNodePath } from "#/constants/org-chart";
 import { useNavigation } from "#/context/navigation-context";
@@ -76,7 +76,7 @@ export function OrgChartView({ nodeId }: OrgChartViewProps) {
   const zoom = useOrgChartStore((state) => state.zoom);
   const full = view === "full";
   // The whole org is one subscription whichever team the page is on.
-  const { status, focusId, nodes, escalations } = useOrgTree(
+  const { status, focusId, nodes, escalations, orgState } = useOrgTree(
     full ? null : nodeId,
     full,
   );
@@ -95,6 +95,25 @@ export function OrgChartView({ nodeId }: OrgChartViewProps) {
   React.useEffect(() => {
     if (status === "live") refetchOrg();
   }, [status, refetchOrg]);
+  // A pause or a merge begun elsewhere shows as soon as the stream says so.
+  const queryClient = useQueryClient();
+  React.useEffect(() => {
+    if (orgState === null) return;
+    const key = DIRECTOR_QUERY_KEYS.org(backend.id);
+    const known = queryClient.getQueryData<OrgSummary>(key);
+    if (
+      !known ||
+      (known.paused === orgState.paused && known.merging === orgState.merging)
+    )
+      return;
+    queryClient.setQueryData<OrgSummary>(key, { ...known, ...orgState });
+    queryClient.invalidateQueries({
+      queryKey: DIRECTOR_QUERY_KEYS.recovery(backend.id),
+    });
+    queryClient.invalidateQueries({
+      queryKey: DIRECTOR_QUERY_KEYS.merge(backend.id),
+    });
+  }, [orgState, backend.id, queryClient]);
   // Details belong to the team they were opened on.
   const [detailsId, setDetailsId] = React.useState<NodeId | null>(null);
   const closeDetails = React.useCallback(() => setDetailsId(null), []);
