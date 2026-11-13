@@ -1,7 +1,24 @@
-import { act, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  configure,
+  getConfig,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import type {
   AgentRef,
   Escalation,
@@ -162,6 +179,22 @@ function blackboardHandlers(
   return taught;
 }
 
+// Now and then the first request of a test is not intercepted and goes to
+// the network, where nothing listens. The page then asks again after a
+// second, which is as long as a finder waits by default: wait longer than
+// one retry, so that this costs a second and not the test.
+const FIND_TIMEOUT_MS = 4000;
+let defaultFindTimeout: number;
+
+beforeAll(() => {
+  defaultFindTimeout = getConfig().asyncUtilTimeout;
+  configure({ asyncUtilTimeout: FIND_TIMEOUT_MS });
+});
+
+afterAll(() => {
+  configure({ asyncUtilTimeout: defaultFindTimeout });
+});
+
 beforeEach(() => {
   window.localStorage.clear();
   useOrgChartStore.setState({ view: "focused", zoom: 1, ownershipOpen: true });
@@ -182,6 +215,9 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  // Unmount first: a chart still on the page takes a closed stream for a
+  // lost server and asks for a new one, which then belongs to no test.
+  cleanup();
   streams.forEach((stream) => {
     try {
       stream.close();
