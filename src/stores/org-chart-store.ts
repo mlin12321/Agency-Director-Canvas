@@ -1,8 +1,13 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
-/** `focused`: one team and its direct reports. `full`: the whole org. */
-export type OrgChartViewMode = "focused" | "full";
+/**
+ * `focused`: one team and its direct reports. `full`: the whole org as a
+ * tree. `by_state`: every team as a card under the state it is in.
+ */
+export type OrgChartViewMode = "focused" | "full" | "by_state";
+
+const VIEW_MODES: readonly OrgChartViewMode[] = ["focused", "full", "by_state"];
 
 export const ORG_CHART_ZOOM = { min: 0.3, max: 2, step: 0.1, initial: 1 };
 
@@ -60,7 +65,7 @@ export const useOrgChartStore = create<OrgChartState & OrgChartActions>()(
         const stored = (persisted ?? {}) as Partial<OrgChartState>;
         return {
           ...current,
-          view: stored.view === "full" ? "full" : "focused",
+          view: VIEW_MODES.find((mode) => mode === stored.view) ?? "focused",
           zoom: toZoom(stored.zoom),
           ownershipOpen: stored.ownershipOpen !== false,
         };

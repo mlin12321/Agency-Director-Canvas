@@ -22,6 +22,7 @@ import { OrgBreadcrumb } from "./org-breadcrumb";
 import { PauseButton, PausedBanner } from "./org-pause";
 import { OrgSync } from "./org-sync";
 import { OrgSettings } from "./org-settings";
+import { OrgByState } from "./org-by-state";
 import { OrgTree } from "./org-tree";
 import { OwnershipMap } from "./ownership-map";
 import { HOME_PATH, StartOrgNotice } from "./start-org-notice";
@@ -66,6 +67,38 @@ const CHART_MARGIN = 48;
 const FULL_SCALE = 1.25;
 
 /**
+ * Whatever chart is drawn sits in the middle of its frame, both ways, with
+ * room around it, and scrolls once it is larger.
+ */
+function ChartCanvas({
+  full,
+  zoom,
+  children,
+}: {
+  full: boolean;
+  zoom: number;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      className={
+        full
+          ? "flex min-h-full w-max min-w-full items-center justify-center p-4"
+          : "flex min-h-full w-full items-center justify-center p-4"
+      }
+    >
+      <div
+        data-testid="org-chart-zoom"
+        style={{ "--org-chart-zoom": zoom } as React.CSSProperties}
+        className={cn("org-chart-zoom", full || "w-full")}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/**
  * An org chart of agent teams. It is on one team at a time and draws either
  * that team with its direct reports, or the whole org with that team in the
  * middle. Besides the org itself, only what waits on the human is shown.
@@ -74,7 +107,9 @@ export function OrgChartView({ nodeId }: OrgChartViewProps) {
   const { t } = useTranslation("openhands");
   const view = useOrgChartStore((state) => state.view);
   const zoom = useOrgChartStore((state) => state.zoom);
-  const full = view === "full";
+  const byState = view === "by_state";
+  // Both views of the whole org; `byState` says which.
+  const full = view !== "focused";
   // The whole org is one subscription whichever team the page is on.
   const { status, focusId, nodes, escalations, orgState } = useOrgTree(
     full ? null : nodeId,
@@ -250,22 +285,15 @@ export function OrgChartView({ nodeId }: OrgChartViewProps) {
           aria-label={t(I18nKey.ORG_CHART$NAV)}
           className="min-h-0 flex-1 overflow-auto rounded-xl border border-border"
         >
-          {/* Whatever is drawn sits in the middle of the chart, both ways,
-              with room around it, and scrolls once it is larger. */}
-          <div
-            className={
-              full
-                ? "flex min-h-full w-max min-w-full items-center justify-center p-4"
-                : "flex min-h-full w-full items-center justify-center p-4"
-            }
-          >
-            <div
-              data-testid="org-chart-zoom"
-              style={
-                { "--org-chart-zoom": zoom * fit.scale } as React.CSSProperties
-              }
-              className={cn("org-chart-zoom", full || "w-full")}
-            >
+          {byState ? (
+            <OrgByState
+              nodes={nodes}
+              currentId={current.id}
+              collidingIds={colliding}
+              onOpenDetails={openDetails}
+            />
+          ) : (
+            <ChartCanvas full={full} zoom={zoom * fit.scale}>
               {full ? (
                 <OrgTree
                   root={top}
@@ -284,8 +312,8 @@ export function OrgChartView({ nodeId }: OrgChartViewProps) {
                   onOpenDetails={openDetails}
                 />
               )}
-            </div>
-          </div>
+            </ChartCanvas>
+          )}
         </section>
         <OwnershipMap node={current} ownership={ownership} />
         {org.data ? (

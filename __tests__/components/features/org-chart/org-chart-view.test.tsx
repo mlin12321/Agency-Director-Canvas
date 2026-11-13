@@ -439,7 +439,7 @@ describe("OrgChartView", () => {
       renderWithProviders(<OrgChartView nodeId="auth" />);
       await findCard("oauth");
 
-      for (let presses = 0; presses < 12; presses += 1) {
+      for (let presses = 0; presses < 16; presses += 1) {
         if (document.activeElement === teamLink("oauth")) break;
         await user.tab();
       }
@@ -484,7 +484,7 @@ describe("OrgChartView", () => {
       renderWithProviders(<OrgChartView nodeId={null} />);
       await findCard("billing");
 
-      for (let presses = 0; presses < 12; presses += 1) {
+      for (let presses = 0; presses < 16; presses += 1) {
         if (document.activeElement === teamLink("billing")) break;
         await user.tab();
       }
@@ -528,6 +528,35 @@ describe("OrgChartView", () => {
       expect(
         screen.getByRole("button", { name: "ORG_CHART$VIEW_FULL" }),
       ).toHaveAttribute("aria-pressed", "true");
+    });
+
+    it("groups the whole org by state, and moves a team as its state changes", async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<OrgChartView nodeId="auth" />);
+      await findCard("auth");
+
+      await user.click(
+        screen.getByRole("button", { name: "ORG_CHART$VIEW_BY_STATE" }),
+      );
+      await findCard("oauth");
+
+      const column = (state: string) =>
+        within(screen.getByTestId(`org-state-${state}`))
+          .getAllByTestId(/^org-node-/)
+          .map((element) => element.getAttribute("data-testid")?.slice(9));
+      expect(lastStream().toString()).toBe("full=true");
+      expect(column("working")).toEqual(["root", "auth", "search"]);
+      expect(column("blocked")).toEqual(["billing"]);
+      expect(column("done")).toEqual(["oauth"]);
+      expect(card("auth")).toHaveAttribute("data-current");
+      expect(
+        screen.getByRole("button", { name: "ORG_CHART$ZOOM_IN" }),
+      ).toBeDisabled();
+
+      store.upsert(input("search", "root", "done", "services/search"));
+
+      await waitFor(() => expect(column("done")).toEqual(["search", "oauth"]));
+      expect(column("working")).toEqual(["root", "auth"]);
     });
 
     it("marks the team the page is on and follows it without asking the server again", async () => {
@@ -1116,7 +1145,7 @@ describe("OrgChartView", () => {
       renderWithProviders(<OrgChartView nodeId={null} />);
       await findCard("search");
 
-      for (let presses = 0; presses < 12; presses += 1) {
+      for (let presses = 0; presses < 16; presses += 1) {
         if (document.activeElement === teamLink("search")) break;
         await user.tab();
       }

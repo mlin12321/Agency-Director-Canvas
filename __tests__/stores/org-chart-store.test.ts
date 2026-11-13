@@ -49,6 +49,7 @@ describe("org-chart store", () => {
       { view: "full", zoom: ORG_CHART_ZOOM.min },
     ],
     [{ zoom: 0.74 }, { view: "focused", zoom: 0.7 }],
+    [{ view: "by_state" }, { view: "by_state", zoom: 1 }],
     [null, { view: "focused", zoom: 1 }],
   ])("falls back to usable values for a stored %j", async (state, expected) => {
     await restore(state);
