@@ -29,6 +29,9 @@ import {
   OPENAI_SUBSCRIPTION_VENDOR,
 } from "#/constants/llm-subscription";
 
+const { mockRouteToOrg } = vi.hoisted(() => ({ mockRouteToOrg: vi.fn() }));
+vi.mock("#/api/director/route-to-org", () => ({ routeToOrg: mockRouteToOrg }));
+
 const {
   mockHttpGet,
   mockHttpPost,
@@ -221,6 +224,8 @@ describe("AgentServerConversationService", () => {
     mockHttpGet.mockReset();
     mockHttpPost.mockReset();
     mockHttpDelete.mockReset();
+    // No org takes the message unless a test says so.
+    mockRouteToOrg.mockReset().mockResolvedValue(null);
     mockGetProfile.mockReset();
     mockActivateProfile.mockReset();
     mockListProfiles.mockReset();
@@ -2912,6 +2917,91 @@ describe("AgentServerConversationService", () => {
         selected_branch: "main",
         git_provider: "github",
         selected_workspace: null,
+      });
+    });
+
+    describe("the first message of a new local conversation", () => {
+      beforeEach(() => {
+        mockGetSettings.mockResolvedValue({
+          agent_settings: { llm: { model: "gpt-4o" } },
+          conversation_settings: {},
+        });
+        mockGetSettingsForConversation.mockResolvedValue({
+          agentSettings: { llm: { model: "gpt-4o" } },
+          conversationSettings: {},
+          secretsEncrypted: true,
+        });
+        mockHttpPost.mockResolvedValue({
+          data: makeDirectConversation({ id: "conv-created" }),
+        });
+      });
+
+      const launch = {
+        agentProfileId: "profile-1",
+        initialUserMsg: "  Build the checkout  ",
+        workingDirOverride: "/work/shop/services/api",
+      };
+
+      it("starts the org of its folder and runs as the root team's IC", async () => {
+        mockRouteToOrg.mockResolvedValue({
+          node_id: "root",
+          conversation_id: "ignored",
+          started_org: true,
+        });
+
+        const task =
+          await AgentServerConversationService.createConversation(launch);
+
+        const [text, folder, conversation] = mockRouteToOrg.mock.calls[0];
+        expect([text, folder]).toEqual([
+          "Build the checkout",
+          "/work/shop/services/api",
+        ]);
+        // The director starts the conversation that would have been started.
+        expect(conversation.conversation_id).toBe(task.app_conversation_id);
+        expect(conversation.workspace.working_dir).toBe(
+          "/work/shop/services/api",
+        );
+        expect(mockHttpPost).not.toHaveBeenCalled();
+        expect(task.status).toBe("READY");
+      });
+
+      it("opens the conversation of the team that took it when the org is running", async () => {
+        mockRouteToOrg.mockResolvedValue({
+          node_id: "services.api",
+          conversation_id: "conv-api-ic",
+          started_org: false,
+        });
+
+        const task =
+          await AgentServerConversationService.createConversation(launch);
+
+        expect(task.app_conversation_id).toBe("conv-api-ic");
+        expect(mockHttpPost).not.toHaveBeenCalled();
+      });
+
+      it("starts an ordinary conversation when no org takes it", async () => {
+        const task =
+          await AgentServerConversationService.createConversation(launch);
+
+        expect(mockRouteToOrg).toHaveBeenCalledTimes(1);
+        expect(mockHttpPost).toHaveBeenCalledTimes(1);
+        expect(task.app_conversation_id).toBe("conv-created");
+      });
+
+      it.each([
+        ["has no message", { initialUserMsg: undefined }],
+        ["continues another conversation", { parentConversationId: "parent" }],
+        ["sets up an automation", { automationSetup: true }],
+        ["plans", { agentType: "plan" as const }],
+        ["runs an ACP agent", { agentProfileKind: "acp" as const }],
+      ])("is not offered to the org when it %s", async (_, options) => {
+        await AgentServerConversationService.createConversation({
+          ...launch,
+          ...options,
+        }).catch(() => undefined);
+
+        expect(mockRouteToOrg).not.toHaveBeenCalled();
       });
     });
 

@@ -97,6 +97,7 @@ describe("conversation-panel-preferences store", () => {
       "organizeMode",
       "selectedAutomationNames",
       "selectedTagFacets",
+      "showAgentStartedConversations",
       "showArchivedConversations",
       "showHoverMetadata",
       "showLlmProfiles",

@@ -70,6 +70,7 @@ import { useUpdateConversationTagFlags } from "#/hooks/mutation/use-update-conve
 import {
   ARCHIVED_CONVERSATION_TAG_KEY,
   hasConversationTagFlag,
+  isAgentStartedConversation,
   PINNED_CONVERSATION_TAG_KEY,
 } from "#/utils/conversation-tag-flags";
 import { uniqueById } from "#/utils/unique-by-id";
@@ -126,6 +127,9 @@ export function ConversationPanel({
   );
   const showArchivedConversations = useConversationPanelPreferencesStore(
     (state) => state.showArchivedConversations,
+  );
+  const showAgentStartedConversations = useConversationPanelPreferencesStore(
+    (state) => state.showAgentStartedConversations,
   );
   const showRepoBranchMetadata = useConversationPanelPreferencesStore(
     (state) => state.showRepoBranchMetadata,
@@ -355,14 +359,23 @@ export function ConversationPanel({
   // Display collection: same loaded pages, with effectively-archived rows
   // (explicitly archived or missing-runtime) filtered out unless the user has
   // opted into "Show archived".
-  const conversations = React.useMemo(() => {
-    if (showArchivedConversations) {
-      return allLoadedConversations;
-    }
-    return allLoadedConversations.filter(
-      (conversation) => !isRowArchived(conversation),
-    );
-  }, [allLoadedConversations, isRowArchived, showArchivedConversations]);
+  // Conversations an org's director started for its agents are reached from
+  // the org chart, and are listed here only on request.
+  const conversations = React.useMemo(
+    () =>
+      allLoadedConversations.filter(
+        (conversation) =>
+          (showArchivedConversations || !isRowArchived(conversation)) &&
+          (showAgentStartedConversations ||
+            !isAgentStartedConversation(conversation.tags)),
+      ),
+    [
+      allLoadedConversations,
+      isRowArchived,
+      showAgentStartedConversations,
+      showArchivedConversations,
+    ],
+  );
 
   // Pin/archive ID sets derive from the tags on the loaded conversations
   // (the unfiltered set, so archived-but-pinned rows still resolve and

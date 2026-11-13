@@ -36,6 +36,8 @@ interface ConversationPanelPreferencesState {
    */
   olderConversationCutoff: OlderConversationCutoff;
   showArchivedConversations: boolean;
+  /** Also list the conversations an org's director started for its agents. */
+  showAgentStartedConversations: boolean;
   showRepoBranchMetadata: boolean;
   showLlmProfiles: boolean;
   showTagsMetadata: boolean;
@@ -78,6 +80,7 @@ interface ConversationPanelPreferencesActions {
   toggleShowOlderConversations: () => void;
   setOlderConversationCutoff: (value: OlderConversationCutoff) => void;
   toggleShowArchivedConversations: () => void;
+  toggleShowAgentStartedConversations: () => void;
   setShowRepoBranchMetadata: (value: boolean) => void;
   toggleShowRepoBranchMetadata: () => void;
   setShowLlmProfiles: (value: boolean) => void;
@@ -111,6 +114,7 @@ const initialState: ConversationPanelPreferencesState = {
   ...DEFAULT_LAYOUT_SETTINGS,
   olderConversationCutoff: DEFAULT_OLDER_CONVERSATION_CUTOFF,
   showArchivedConversations: false,
+  showAgentStartedConversations: false,
   automationFilterMode: "all",
   selectedAutomationNames: [],
   selectedTagFacets: [],
@@ -139,6 +143,10 @@ export const useConversationPanelPreferencesStore =
         toggleShowArchivedConversations: () =>
           set((state) => ({
             showArchivedConversations: !state.showArchivedConversations,
+          })),
+        toggleShowAgentStartedConversations: () =>
+          set((state) => ({
+            showAgentStartedConversations: !state.showAgentStartedConversations,
           })),
 
         setShowRepoBranchMetadata: (value) =>
@@ -215,6 +223,7 @@ export const useConversationPanelPreferencesStore =
             ? state.olderConversationCutoff
             : DEFAULT_OLDER_CONVERSATION_CUTOFF,
           showArchivedConversations: state.showArchivedConversations,
+          showAgentStartedConversations: state.showAgentStartedConversations,
           showRepoBranchMetadata: state.showRepoBranchMetadata,
           showLlmProfiles: state.showLlmProfiles,
           showTagsMetadata: state.showTagsMetadata,

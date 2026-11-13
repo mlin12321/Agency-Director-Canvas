@@ -61,7 +61,7 @@ export function NodeCard({
   const body = (
     <>
       <span className="flex w-full items-center gap-1.5">
-        <span className="min-w-0 flex-1 truncate text-sm font-medium text-contrast">
+        <span className="min-w-0 flex-1 truncate text-xs font-medium text-contrast">
           {node.title}
         </span>
         {node.escalation_count > 0 ? (
@@ -70,20 +70,20 @@ export function NodeCard({
             aria-label={t(I18nKey.ORG_CHART$ESCALATION_COUNT, {
               count: node.escalation_count,
             })}
-            className="flex shrink-0 items-center gap-0.5 text-xs font-medium text-feedback-error"
+            className="flex shrink-0 items-center gap-0.5 text-[11px] font-medium text-feedback-error"
           >
-            <TriangleAlert width={12} height={12} aria-hidden="true" />
+            <TriangleAlert width={11} height={11} aria-hidden="true" />
             {node.escalation_count}
           </span>
         ) : null}
       </span>
       {node.headline ? (
-        <span className="w-full truncate text-xs text-text-secondary">
+        <span className="w-full truncate text-[11px] text-text-secondary">
           {node.headline}
         </span>
       ) : null}
       {node.child_ids.length > 0 ? (
-        <span className="text-xs text-muted">
+        <span className="text-[11px] text-muted">
           {t(I18nKey.ORG_CHART$SUB_TEAMS, { count: node.child_ids.length })}
         </span>
       ) : null}

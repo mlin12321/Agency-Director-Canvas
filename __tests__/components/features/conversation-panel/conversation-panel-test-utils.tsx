@@ -123,6 +123,7 @@ export const setupConversationPanelTest = () => {
       showOlderConversations: true,
       olderConversationCutoff: "7d",
       showArchivedConversations: false,
+      showAgentStartedConversations: false,
       automationFilterMode: "all",
       selectedAutomationNames: [],
       selectedTagFacets: [],
