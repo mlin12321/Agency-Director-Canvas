@@ -1275,6 +1275,38 @@ describe("OrgChartView", () => {
       expect(navigate).not.toHaveBeenCalled();
     });
 
+    it("starts out from the folder the server was started for when the team on the page owns it", async () => {
+      const summary: OrgSummary = {
+        root_id: "root",
+        node_count: 5,
+        repo_path: "/work/shop",
+        directory: "services/auth/vendor/tokens",
+        is_git_repository: true,
+        fixture: false,
+      };
+      server.use(
+        http.get("*/api/director/org", () => HttpResponse.json(summary)),
+      );
+      const { unmount } = renderWithProviders(<OrgChartView nodeId="auth" />);
+      await findCard("auth");
+
+      await waitFor(() =>
+        expect(
+          within(form()).getByLabelText("ORG_CHART$ASK_PATH_LABEL"),
+        ).toHaveValue("services/auth/vendor/tokens"),
+      );
+
+      // Another team's page keeps to that team's folder.
+      unmount();
+      renderWithProviders(<OrgChartView nodeId="billing" />);
+      await findCard("billing");
+      await waitFor(() =>
+        expect(
+          within(form()).getByLabelText("ORG_CHART$ASK_PATH_LABEL"),
+        ).toHaveValue("services/billing"),
+      );
+    });
+
     it("moves the page to the team that took it when that is another one", async () => {
       const sent = routing("oauth");
       const navigate = vi.fn();

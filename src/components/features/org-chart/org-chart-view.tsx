@@ -228,6 +228,7 @@ export function OrgChartView({ nodeId }: OrgChartViewProps) {
         <AskOrgForm
           key={current.id}
           node={current}
+          serverFolder={org.data?.directory}
           titleOf={titleOf}
           onSent={openTeamOf}
         />

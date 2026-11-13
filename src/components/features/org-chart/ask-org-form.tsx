@@ -8,8 +8,13 @@ const FIELD_CLASS =
   "rounded-md border border-border-input bg-field px-2 py-1.5 text-sm text-field-foreground";
 
 interface AskOrgFormProps {
-  /** The team the page is on; a message starts out from its folder. */
+  /** The team the page is on. */
   node: OrgNode;
+  /**
+   * The folder the server was started for. A message starts out from it
+   * when the team on the page owns it, otherwise from that team's folder.
+   */
+  serverFolder?: string;
   /** Title of a team by id, when the page has it. */
   titleOf: (id: string) => string;
   /** Called with the team that took the message. */
@@ -21,10 +26,24 @@ interface AskOrgFormProps {
  * it to the nearest team at or above that folder, so the human does not have
  * to know which team owns what.
  */
-export function AskOrgForm({ node, titleOf, onSent }: AskOrgFormProps) {
+export function AskOrgForm({
+  node,
+  serverFolder,
+  titleOf,
+  onSent,
+}: AskOrgFormProps) {
   const { t } = useTranslation("openhands");
   const [text, setText] = React.useState("");
-  const [path, setPath] = React.useState(node.boundary.path);
+  const teamFolder = node.boundary.path;
+  const startsFrom =
+    serverFolder !== undefined &&
+    (teamFolder === "" || `${serverFolder}/`.startsWith(`${teamFolder}/`))
+      ? serverFolder
+      : teamFolder;
+  // Null until the human names a folder: the server's is known only once
+  // the org's summary has loaded.
+  const [typedPath, setPath] = React.useState<string | null>(null);
+  const path = typedPath ?? startsFrom;
   const textId = React.useId();
   const pathId = React.useId();
   const hintId = React.useId();

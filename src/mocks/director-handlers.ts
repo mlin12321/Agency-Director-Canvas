@@ -303,6 +303,7 @@ export const DIRECTOR_HANDLERS = [
       root_id: ROOT_ID,
       node_count: tree.size,
       repo_path: "/workspace/project",
+      directory: "",
       is_git_repository: true,
       fixture: true,
       boundary_enforcement: "sandbox",
