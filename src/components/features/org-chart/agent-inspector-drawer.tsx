@@ -109,7 +109,9 @@ export function AgentInspectorDrawer({
             onClick={() => setRole(candidate.role)}
             className={cn(
               "flex items-center gap-2 rounded-md border border-border px-2.5 py-1 text-sm text-contrast hover:bg-surface-raised",
-              candidate.role === agent?.role ? "bg-surface-raised" : null,
+              candidate.role === agent?.role
+                ? "bg-surface-raised director:border-primary director:bg-interactive-selected"
+                : null,
             )}
           >
             {t(ROLE_LABEL_KEYS[candidate.role])}

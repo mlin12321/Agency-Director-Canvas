@@ -29,6 +29,23 @@ describe("Director palette", () => {
     expect(COLOR_THEMES.director.tokens?.[ink]).toBe("#000000");
   });
 
+  it("fills primary actions and chosen controls in bright red with a readable label", () => {
+    const red = surfaceColor("director", "--oh-color-primary");
+    expect(surfaceColor("director", "--oh-accent")).toEqual(red);
+    expect(
+      contrast(surfaceColor("director", "--oh-accent-foreground"), red),
+    ).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it.each(["--oh-border", "--oh-border-input", "--oh-border-subtle"] as const)(
+    "draws %s in gray, lighter than the text ink",
+    (outline) => {
+      expect(contrast(surfaceColor("director", outline), WHITE)).toBeLessThan(
+        4,
+      );
+    },
+  );
+
   it("draws joining lines in a red that stands out from the page", () => {
     const line = surfaceColor("director", "--oh-line-accent");
     expect(line).not.toEqual(surfaceColor("director", "--oh-border"));

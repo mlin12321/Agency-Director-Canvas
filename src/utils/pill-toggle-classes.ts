@@ -9,7 +9,7 @@ export function pillToggleClassName(active: boolean) {
     "inline-flex cursor-pointer items-center gap-2 whitespace-nowrap rounded-full border-0 px-3 py-1.5 text-sm transition-colors",
     "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
     active
-      ? "bg-contrast text-contrast-foreground"
+      ? "bg-contrast text-contrast-foreground director:bg-primary director:text-on-accent"
       : "bg-contrast/5 text-tertiary-light hover:bg-surface-raised hover:text-contrast",
   );
 }

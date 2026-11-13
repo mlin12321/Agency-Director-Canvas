@@ -7,14 +7,24 @@ them; changing the page background alone is not a complete theme.
 ## Director
 
 Director (`director`) is the default palette: white, then black, then one
-bright red, in that order of prominence. The page and every panel are white
-(the terminal's too, as xterm paints no background of its own); light gray
-marks an area within a panel; text is black and primary actions print in
-reverse. Red is for lines and detail: the lines that join teams in the org
-chart (`--oh-line-accent`, which every other palette leaves on its border
-colour), the focus ring and error dots. Red that is read as text (links,
-danger) is one step deeper so it stays legible on the gray areas. Success and
-warning keep the Light+ inks. Code, diffs and terminal output reuse the Light+
+bright red, in that order of prominence.
+
+- **White:** the page and every panel (the terminal's too, as xterm paints no
+  background of its own). Very light grays mark an area within a panel.
+- **Black:** text only. Outlines are gray, as light as the 3:1 boundary rule
+  for controls allows.
+- **Bright red:** what is filled, chosen or drawn. Primary actions and
+  switched-on controls are filled red with a white label; the selected row is
+  tinted; icons, the lines that join teams in the org chart
+  (`--oh-line-accent`, which every other palette leaves on its border colour)
+  and the focus ring are red. Red that is read as text (links, danger) is one
+  step deeper so it stays legible on the gray areas.
+
+Icons are coloured by one rule in `tailwind.css`; an icon that carries a
+status, warning or success colour, has a `color` attribute, or sits on a
+filled control keeps its own. Classes that should apply in this palette only
+use the `director:` variant, e.g. `director:bg-primary`. Success and warning
+keep the Light+ inks, and code, diffs and terminal output reuse the Light+
 palettes unchanged. A reader who already chose a palette keeps it, and an
 embedded root that applies none stays on the stylesheet's dark defaults
 (`UNAPPLIED_COLOR_THEME`).

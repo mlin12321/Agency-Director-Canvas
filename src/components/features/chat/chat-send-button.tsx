@@ -24,8 +24,8 @@ export function ChatSendButton({
       className={cn(
         "flex items-center justify-center rounded-full border border-contrast size-8",
         disabled
-          ? "cursor-not-allowed border-muted"
-          : "cursor-pointer hover:bg-contrast/10",
+          ? "cursor-not-allowed border-muted text-muted"
+          : "cursor-pointer text-contrast hover:bg-contrast/10 director:border-primary director:bg-primary director:text-on-accent director:hover:bg-primary director:hover:opacity-85",
         buttonClassName,
       )}
       data-name="arrow-up-circle-fill"
@@ -42,10 +42,7 @@ export function ChatSendButton({
           aria-hidden
         />
       ) : (
-        <ArrowUp
-          className="w-4 h-4"
-          color={disabled ? "var(--oh-muted)" : "var(--oh-contrast)"}
-        />
+        <ArrowUp className="w-4 h-4" />
       )}
     </button>
   );

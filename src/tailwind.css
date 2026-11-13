@@ -362,6 +362,21 @@
   --scrollbar-color: var(--oh-scrollbar) transparent;
 }
 
+/* Classes that apply in the Director palette only, e.g. director:bg-primary. */
+@custom-variant director (&:where([data-color-theme="director"], [data-color-theme="director"] *));
+
+/*
+ * Director draws its icons in the palette's red. An icon that says something
+ * by its colour (a warning, a success, a status), or that sits on a filled
+ * control, keeps the colour it was given.
+ */
+[data-color-theme="director"] svg:not([color], [class*="status-"], [class*="feedback-"], [class*="success"], [class*="warning"], [class*="text-on-"], [class*="contrast-foreground"], [class*="text-muted"]) {
+  color: var(--oh-color-primary);
+}
+[data-color-theme="director"] :is([class*="feedback-"], [class*="text-success"], [class*="text-warning"], [class*="text-on-"], [class*="contrast-foreground"], :disabled, [aria-disabled="true"], .mermaid) svg {
+  color: inherit;
+}
+
 @layer base {
   button:not(:disabled),
   [role="button"]:not([aria-disabled="true"]) {
