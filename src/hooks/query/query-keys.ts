@@ -127,6 +127,10 @@ export const DIRECTOR_QUERY_KEYS = {
     ["director", "blackboard", backendId, nodeId] as const,
   ownership: (backendId: string, nodeId: string) =>
     ["director", "ownership", backendId, nodeId] as const,
+  changes: (backendId: string, nodeId: string) =>
+    ["director", "changes", backendId, nodeId] as const,
+  changedFile: (backendId: string, nodeId: string, path: string) =>
+    ["director", "changes", backendId, nodeId, path] as const,
   settings: (backendId: string) => ["director", "settings", backendId] as const,
   search: (backendId: string, query: string) =>
     ["director", "search", backendId, query] as const,

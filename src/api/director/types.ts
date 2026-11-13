@@ -404,6 +404,42 @@ export interface Collision {
   node_ids: NodeId[];
 }
 
+/** One file a team changed. */
+export interface ChangedFile {
+  /** Relative to the top of the repository. */
+  path: string;
+  kind: "added" | "modified" | "deleted";
+  /** `null` when the file is not text. */
+  added: number | null;
+  removed: number | null;
+  /** False when the file has changes that are not committed. */
+  committed: boolean;
+}
+
+/** What a team changed in its directory since its base commit. */
+export interface TeamChanges {
+  node_id: NodeId;
+  /** The commit compared with; `""` when the team has none yet. */
+  base: string;
+  files: ChangedFile[];
+  truncated: boolean;
+}
+
+/** A file at a team's base commit and in its checkout now. */
+export interface FileSides {
+  path: string;
+  before: string | null;
+  after: string | null;
+  /** A side is not text or is too large, and is left out. */
+  unreadable: boolean;
+}
+
+/** What came of a change made by hand; `commit` is null when nothing changed. */
+export interface FileEdit {
+  path: string;
+  commit: string | null;
+}
+
 /** How a node's boundary is divided among its direct reports. */
 export interface NodeOwnership {
   node_id: NodeId;

@@ -26,6 +26,18 @@ const AgentConversation = React.lazy(() =>
   })),
 );
 
+// Monaco comes with the changes, so they load when first asked for.
+const TeamChanges = React.lazy(() =>
+  import("./team-changes").then((module) => ({
+    default: module.TeamChanges,
+  })),
+);
+
+const TAB_CLASS =
+  "flex items-center gap-2 rounded-md border border-border px-2.5 py-1 text-sm text-contrast hover:bg-surface-raised";
+const TAB_CHOSEN_CLASS =
+  "bg-surface-raised director:border-primary director:bg-interactive-selected";
+
 interface AgentInspectorDrawerProps {
   node: OrgNode;
   /**
@@ -46,6 +58,7 @@ export function AgentInspectorDrawer({
   const titleId = React.useId();
   // Tracked by role so the drawer follows the agent across live updates.
   const [role, setRole] = React.useState<AgentRole | null>(null);
+  const [showsChanges, setShowsChanges] = React.useState(false);
   const agent =
     node.agents.find((candidate) => candidate.role === role) ??
     node.agents.at(0) ??
@@ -107,12 +120,15 @@ export function AgentInspectorDrawer({
           <button
             key={candidate.role}
             type="button"
-            aria-pressed={candidate.role === agent?.role}
-            onClick={() => setRole(candidate.role)}
+            aria-pressed={!showsChanges && candidate.role === agent?.role}
+            onClick={() => {
+              setRole(candidate.role);
+              setShowsChanges(false);
+            }}
             className={cn(
-              "flex items-center gap-2 rounded-md border border-border px-2.5 py-1 text-sm text-contrast hover:bg-surface-raised",
-              candidate.role === agent?.role
-                ? "bg-surface-raised director:border-primary director:bg-interactive-selected"
+              TAB_CLASS,
+              !showsChanges && candidate.role === agent?.role
+                ? TAB_CHOSEN_CLASS
                 : null,
             )}
           >
@@ -126,16 +142,36 @@ export function AgentInspectorDrawer({
             ) : null}
           </button>
         ))}
+        <button
+          type="button"
+          data-testid="org-team-changes-tab"
+          aria-pressed={showsChanges}
+          onClick={() => setShowsChanges(true)}
+          className={cn(
+            TAB_CLASS,
+            "ml-auto",
+            showsChanges ? TAB_CHOSEN_CLASS : null,
+          )}
+        >
+          {t(I18nKey.ORG_CHART$CHANGES)}
+        </button>
       </div>
 
-      {agent?.conversation_id ? (
+      {showsChanges ? (
+        <div className="min-h-0 flex-1">
+          <React.Suspense fallback={null}>
+            <TeamChanges key={node.id} node={node} />
+          </React.Suspense>
+        </div>
+      ) : null}
+      {!showsChanges && agent?.conversation_id ? (
         <p className="border-b border-border px-3 py-1.5 text-xs text-muted">
           {t(I18nKey.ORG_CHART$MESSAGE_AGENT_HINT, {
             role: t(ROLE_LABEL_KEYS[agent.role]),
           })}
         </p>
       ) : null}
-      <div className="min-h-0 flex-1">
+      <div className={cn("min-h-0 flex-1", showsChanges && "hidden")}>
         {agent?.conversation_id ? (
           <React.Suspense fallback={null}>
             <AgentConversation
