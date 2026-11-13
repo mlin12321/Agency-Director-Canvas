@@ -1,5 +1,5 @@
 import React from "react";
-import { GitMerge, TriangleAlert } from "lucide-react";
+import { GitMerge, Pause, TriangleAlert } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { OrgNode } from "#/api/director/types";
 import { NavigationLink } from "#/components/shared/navigation-link";
@@ -65,6 +65,8 @@ export const NodeCard = React.memo(function NodeCard({
   // A team whose IC already works says what it delivers, even while its
   // Manager still waits to start.
   const waiting = node.waiting_to_start === true && node.status !== "working";
+  // An agent that was working when the org was paused.
+  const paused = node.agents.some((agent) => agent.status === "paused");
 
   const body = (
     <>
@@ -72,6 +74,16 @@ export const NodeCard = React.memo(function NodeCard({
         <span className="min-w-0 flex-1 truncate text-xs font-medium text-contrast">
           {node.title}
         </span>
+        {paused ? (
+          <span
+            role="img"
+            aria-label={t(I18nKey.ORG_CHART$AGENT_PAUSED)}
+            title={t(I18nKey.ORG_CHART$AGENT_PAUSED)}
+            className="flex shrink-0 text-feedback-warning"
+          >
+            <Pause width={11} height={11} aria-hidden="true" />
+          </span>
+        ) : null}
         {collides ? (
           <span
             role="img"

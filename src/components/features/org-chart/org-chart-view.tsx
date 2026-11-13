@@ -19,6 +19,7 @@ import { ChartToolbar } from "./chart-toolbar";
 import { EscalationsPanel } from "./escalations-panel";
 import { FocusedChart, fitFocusedChart } from "./focused-chart";
 import { OrgBreadcrumb } from "./org-breadcrumb";
+import { PauseButton, PausedBanner } from "./org-pause";
 import { OrgSettings } from "./org-settings";
 import { OrgTree } from "./org-tree";
 import { OwnershipMap } from "./ownership-map";
@@ -88,6 +89,11 @@ export function OrgChartView({ nodeId }: OrgChartViewProps) {
     retry: false,
     meta: { disableToast: true },
   });
+  // A server that comes back may have left its org paused.
+  const refetchOrg = org.refetch;
+  React.useEffect(() => {
+    if (status === "live") refetchOrg();
+  }, [status, refetchOrg]);
   // Details belong to the team they were opened on.
   const [detailsId, setDetailsId] = React.useState<NodeId | null>(null);
   const closeDetails = React.useCallback(() => setDetailsId(null), []);
@@ -206,9 +212,15 @@ export function OrgChartView({ nodeId }: OrgChartViewProps) {
             <TeamSearch />
             {org.data && !org.data.fixture ? <BlackboardSync /> : null}
             <ChartToolbar />
+            {org.data && !org.data.fixture && org.data.paused === null ? (
+              <PauseButton />
+            ) : null}
             {org.data && !org.data.fixture ? <OrgSettings /> : null}
           </div>
         </div>
+        {org.data?.paused !== undefined ? (
+          <PausedBanner paused={org.data.paused} />
+        ) : null}
         <EscalationsPanel escalations={escalations} />
         <section
           ref={setFrame}
