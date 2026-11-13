@@ -11,6 +11,7 @@ import {
   type OrgEvent,
   type OrgNode,
   type OrgSummary,
+  type Review,
   type RoutedMessage,
   type RouteMessageRequest,
 } from "#/api/director/types";
@@ -95,6 +96,20 @@ function zeroCounts(): StatusCounts {
   };
 }
 
+const MOCK_REVIEW: Review = {
+  state: "pending",
+  round: 1,
+  summary: "The module is built and its tests pass.",
+  description:
+    "Adds the module's handlers and their tests.\n\n" +
+    "- `handlers.ts`: new request handlers.\n" +
+    "- `handlers.test.ts`: covers the happy path and bad input.",
+  automated_ran: true,
+  automated: [],
+  findings: [],
+  at: "2026-11-12T10:00:00+00:00",
+};
+
 function buildMockTree() {
   const nodes = new Map<NodeId, OrgNode>();
   const moduleCounts = zeroCounts();
@@ -128,6 +143,7 @@ function buildMockTree() {
         spec_summary: `Implements ${module.name} for ${domain.name}.`,
         escalations: ESCALATIONS[id] ?? [],
         pending_split: null,
+        review: module.status === "done" ? MOCK_REVIEW : null,
         descendant_counts: zeroCounts(),
         escalation_count: waitingOnHuman(id),
       });

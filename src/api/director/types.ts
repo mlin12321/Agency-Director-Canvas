@@ -108,7 +108,8 @@ export interface ReviewFinding {
 
 /**
  * The review of the work a team reported as done. The IC of the team above
- * reviews it; before that, a model reads the team's diff once on its own.
+ * reviews it; before that, the team's own IC is asked to describe the changes
+ * and to review them.
  */
 export interface Review {
   state: ReviewState;
@@ -116,9 +117,12 @@ export interface Review {
   round: number;
   /** What the team said it delivered. */
   summary: string;
-  /** Whether the model's own pass over the diff gave an answer. */
+  /** The team's own account of what it changed, as markdown. Absent on a
+   * server that asks for none. */
+  description?: string;
+  /** Whether the team's IC, asked to review the changes, gave an answer. */
   automated_ran: boolean;
-  /** What that pass found. */
+  /** What it found. */
   automated: ReviewFinding[];
   /** What the reviewing IC wants changed, when it asked. */
   findings: ReviewFinding[];

@@ -1,5 +1,5 @@
 import React from "react";
-import { GitMerge, ScanSearch, TriangleAlert, Undo2 } from "lucide-react";
+import { GitMerge, TriangleAlert } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { OrgNode } from "#/api/director/types";
 import { NavigationLink } from "#/components/shared/navigation-link";
@@ -9,7 +9,6 @@ import { I18nKey } from "#/i18n/declaration";
 import { useOrgChartStore } from "#/stores/org-chart-store";
 import { cn } from "#/utils/utils";
 import { NodeHoverCard } from "./node-hover-card";
-import { REVIEW_LABEL_KEYS } from "./org-chart-presentation";
 
 interface NodeCardProps {
   node: OrgNode;
@@ -62,34 +61,12 @@ export function NodeCard({
     onScreen.current = true;
   }, [zoom]);
 
-  // Accepted and unreviewed work needs nobody's attention.
-  const state = node.review?.state;
-  const reviewMark =
-    state === "pending" || state === "changes_requested" ? state : null;
-
   const body = (
     <>
       <span className="flex w-full items-center gap-1.5">
         <span className="min-w-0 flex-1 truncate text-xs font-medium text-contrast">
           {node.title}
         </span>
-        {reviewMark ? (
-          <span
-            role="img"
-            aria-label={t(REVIEW_LABEL_KEYS[reviewMark])}
-            title={t(REVIEW_LABEL_KEYS[reviewMark])}
-            className={cn(
-              "flex shrink-0",
-              reviewMark === "pending" ? "text-muted" : "text-feedback-warning",
-            )}
-          >
-            {reviewMark === "pending" ? (
-              <ScanSearch width={11} height={11} aria-hidden="true" />
-            ) : (
-              <Undo2 width={11} height={11} aria-hidden="true" />
-            )}
-          </span>
-        ) : null}
         {collides ? (
           <span
             role="img"

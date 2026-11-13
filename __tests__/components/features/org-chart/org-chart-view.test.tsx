@@ -341,16 +341,35 @@ describe("OrgChartView", () => {
       const { rerender } = renderWithProviders(<OrgChartView nodeId={null} />);
       await findCard("root");
       expect(
-        screen.queryByRole("link", { name: "ORG_CHART$GO_UP" }),
+        screen.queryByRole("link", { name: "ORG_CHART$UP_ONE_LEVEL" }),
       ).toBeNull();
 
       rerender(<OrgChartView nodeId="auth" />);
 
       expect(
-        await screen.findByRole("link", { name: "ORG_CHART$GO_UP" }),
+        await screen.findByRole("link", { name: "ORG_CHART$UP_ONE_LEVEL" }),
       ).toHaveAttribute("href", "/org/root");
       expect(cardIds()).toEqual(["auth", "oauth"]);
       expect(lastStream().toString()).toBe("node=auth");
+    });
+
+    it("goes up a team on Alt+ArrowUp, and nowhere from the top", async () => {
+      const navigate = vi.fn();
+      const user = userEvent.setup();
+      const { rerender } = renderWithProviders(<OrgChartView nodeId="auth" />, {
+        navigation: { navigate },
+      });
+      await findCard("auth");
+
+      await user.keyboard("{Alt>}{ArrowUp}{/Alt}");
+
+      expect(navigate).toHaveBeenCalledWith("/org/root");
+
+      rerender(<OrgChartView nodeId={null} />);
+      await findCard("billing");
+      await user.keyboard("{Alt>}{ArrowUp}{/Alt}");
+
+      expect(navigate).toHaveBeenCalledTimes(1);
     });
 
     it("draws a team without reports on its own", async () => {
@@ -656,7 +675,7 @@ describe("OrgChartView", () => {
       });
     });
 
-    it("applies the same zoom to both views", async () => {
+    it("applies the zoom to the whole org too, which starts a quarter larger", async () => {
       useOrgChartStore.setState({ zoom: 0.5 });
       const user = userEvent.setup();
       renderWithProviders(<OrgChartView nodeId={null} />);
@@ -669,7 +688,7 @@ describe("OrgChartView", () => {
         screen
           .getByTestId("org-chart-zoom")
           .style.getPropertyValue("--org-chart-zoom"),
-      ).toBe("0.5");
+      ).toBe("0.625");
     });
   });
 
@@ -1596,6 +1615,7 @@ describe("OrgChartView", () => {
       state: "changes_requested",
       round: 2,
       summary: "Tokens are issued.",
+      description: "Tokens now carry an **expiry** in `token.py`.",
       automated_ran: true,
       automated: [
         {
@@ -1611,13 +1631,7 @@ describe("OrgChartView", () => {
       at: "2026-11-12T10:00:00+00:00",
     };
 
-    function reviewMark(id: string, state: string) {
-      return within(card(id)).queryByRole("img", {
-        name: `ORG_CHART$REVIEW_${state}`,
-      });
-    }
-
-    it("marks the cards of teams whose work waits for review or was sent back, and no other", async () => {
+    it("puts no mark for a review on a card", async () => {
       store.upsert({
         ...input("auth", "root", "working", "services/auth"),
         review: REVIEW,
@@ -1633,10 +1647,10 @@ describe("OrgChartView", () => {
       renderWithProviders(<OrgChartView nodeId="root" />);
       await findCard("auth");
 
-      expect(reviewMark("auth", "CHANGES_REQUESTED")).toBeInTheDocument();
-      expect(reviewMark("search", "PENDING")).toBeInTheDocument();
-      expect(reviewMark("billing", "ACCEPTED")).toBeNull();
-      expect(reviewMark("root", "PENDING")).toBeNull();
+      const marks = ["auth", "search", "billing"].flatMap((id) =>
+        within(card(id)).queryAllByRole("img"),
+      );
+      expect(marks).toEqual([]);
     });
 
     it("says in the team's details where the review stands and what was found", async () => {
@@ -1658,6 +1672,10 @@ describe("OrgChartView", () => {
         "ORG_CHART$REVIEW_CHANGES_REQUESTED · ORG_CHART$REVIEW_ROUND",
       );
       expect(review).toHaveTextContent("Tokens are issued.");
+      expect(review).toHaveTextContent("ORG_CHART$REVIEW_DESCRIPTION");
+      expect(review).toHaveTextContent(
+        "Tokens now carry an expiry in token.py.",
+      );
       expect(review).toHaveTextContent("Add a refresh test.");
       expect(review).toHaveTextContent("services/auth/token.py:12");
       expect(review).toHaveTextContent("The token never expires.");

@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 import type { Review, ReviewFinding } from "#/api/director/types";
+import { MarkdownRenderer } from "#/components/features/markdown/markdown-renderer";
 import { I18nKey } from "#/i18n/declaration";
 import { REVIEW_LABEL_KEYS } from "./org-chart-presentation";
 
@@ -55,8 +56,8 @@ interface ReviewSummaryProps {
 
 /**
  * Where the review of a team's finished work stands: what the team said it
- * delivered, what the automated pass found, and what the reviewing IC
- * wants changed.
+ * delivered and changed, what the reviewing IC wants changed, and what the
+ * team's own review found.
  */
 export function ReviewSummary({ review }: ReviewSummaryProps) {
   const { t } = useTranslation("openhands");
@@ -90,6 +91,18 @@ export function ReviewSummary({ review }: ReviewSummaryProps) {
       <p className="text-xs text-text-secondary">{label(review)}</p>
       {review.summary ? (
         <p className="text-xs text-muted">{review.summary}</p>
+      ) : null}
+      {review.description ? (
+        <div className="flex flex-col gap-1">
+          <h4 className="text-xs font-medium text-contrast">
+            {t(I18nKey.ORG_CHART$REVIEW_DESCRIPTION)}
+          </h4>
+          <div className="text-xs text-text-secondary">
+            <MarkdownRenderer includeStandard>
+              {review.description}
+            </MarkdownRenderer>
+          </div>
+        </div>
       ) : null}
       {review.findings.length > 0 ? (
         <Findings
