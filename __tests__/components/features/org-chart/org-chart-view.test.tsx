@@ -5,7 +5,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   AgentRef,
   Escalation,
+  Autopsy,
   NodeBlackboard,
+  NodeOwnership,
   NodeStatus,
   OrgEvent,
   OrgSummary,
@@ -129,7 +131,10 @@ function streamHandler() {
   });
 }
 
-function blackboardHandlers(initialRules: string[] = []) {
+function blackboardHandlers(
+  initialRules: string[] = [],
+  autopsies: Autopsy[] = [],
+) {
   let rules = initialRules;
   const taught: Array<{ nodeId: string; rule: string }> = [];
   server.use(
@@ -137,7 +142,7 @@ function blackboardHandlers(initialRules: string[] = []) {
       const body: NodeBlackboard = {
         specs: [],
         memory: { rules },
-        autopsies: [],
+        autopsies,
       };
       return HttpResponse.json(body);
     }),
@@ -156,7 +161,7 @@ function blackboardHandlers(initialRules: string[] = []) {
 
 beforeEach(() => {
   window.localStorage.clear();
-  useOrgChartStore.setState({ view: "focused", zoom: 1 });
+  useOrgChartStore.setState({ view: "focused", zoom: 1, ownershipOpen: true });
   streams = [];
   streamRequests = [];
   store = new OrgStore();
@@ -643,7 +648,11 @@ describe("OrgChartView", () => {
       );
       await showWholeOrg(user);
 
-      expect(stored()).toEqual({ view: "full", zoom: 1.1 });
+      expect(stored()).toEqual({
+        view: "full",
+        zoom: 1.1,
+        ownershipOpen: true,
+      });
     });
 
     it("applies the same zoom to both views", async () => {
@@ -1273,6 +1282,9 @@ describe("OrgChartView", () => {
       expect(
         await within(memory).findByText("Never log tokens."),
       ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("region", { name: "ORG_CHART$AUTOPSIES_TITLE" }),
+      ).toBeNull();
       const save = within(memory).getByRole("button", {
         name: "ORG_CHART$TEACH_SUBMIT",
       });
@@ -1291,6 +1303,33 @@ describe("OrgChartView", () => {
       expect(
         within(memory).getByLabelText("ORG_CHART$TEACH_LABEL"),
       ).toHaveValue("");
+    });
+
+    it("lists what failed in the boundary before, and where the discarded work is", async () => {
+      blackboardHandlers(
+        [],
+        [
+          {
+            node_id: "auth",
+            at: "2026-11-12T10:00:00+00:00",
+            approach: "Sessions in memory",
+            why_failed: "Lost on every restart.",
+            saved_ref: "refs/agents/pruned/auth/20261112T100000Z",
+          },
+        ],
+      );
+      const user = userEvent.setup();
+      renderWithProviders(<OrgChartView nodeId="auth" />);
+      await findCard("auth");
+      await user.click(currentCard());
+
+      const failed = await screen.findByRole("region", {
+        name: "ORG_CHART$AUTOPSIES_TITLE",
+      });
+
+      expect(failed).toHaveTextContent("Sessions in memory");
+      expect(failed).toHaveTextContent("Lost on every restart.");
+      expect(failed).toHaveTextContent("ORG_CHART$AUTOPSY_SAVED");
     });
 
     it("says so when there are no rules yet", async () => {
@@ -1348,6 +1387,208 @@ describe("OrgChartView", () => {
       expect(screen.queryByLabelText("ORG_CHART$TEACH_LABEL")).toBeNull();
     });
   });
+
+  describe("who owns what", () => {
+    const OWNERSHIP: NodeOwnership = {
+      node_id: "root",
+      owners: [
+        {
+          node_id: "auth",
+          title: "auth team",
+          path: "services/auth",
+          isolation: "worktree",
+          branch: "agents/auth",
+        },
+        {
+          node_id: "billing",
+          title: "billing team",
+          path: "services/billing",
+          isolation: "worktree",
+          branch: "agents/billing",
+        },
+      ],
+      files: [
+        { path: "README.md", owner: null },
+        { path: "services/auth/login.py", owner: "auth" },
+        { path: "services/auth/oauth/token.py", owner: "auth" },
+        { path: "services/billing/charge.py", owner: "billing" },
+        { path: "services/shared.py", owner: null },
+      ],
+      truncated: false,
+      collisions: [],
+      collisions_checked: true,
+    };
+
+    function serveOwnership(body: Partial<NodeOwnership> = {}) {
+      const asked: string[] = [];
+      server.use(
+        http.get("*/api/director/org/nodes/:nodeId/ownership", ({ params }) => {
+          asked.push(String(params.nodeId));
+          return HttpResponse.json({ ...OWNERSHIP, ...body });
+        }),
+      );
+      return asked;
+    }
+
+    function ownershipMap() {
+      return screen.findByRole("region", { name: "ORG_CHART$OWNERSHIP_TITLE" });
+    }
+
+    function ownerOf(row: HTMLElement) {
+      return within(row).getByRole("img", {
+        name: "ORG_CHART$OWNERSHIP_OWNER",
+      });
+    }
+
+    it("names each team that owns a directory and leads to it", async () => {
+      serveOwnership();
+      renderWithProviders(<OrgChartView nodeId={null} />);
+
+      const legend = within(await ownershipMap()).getByTestId(
+        "ownership-legend",
+      );
+
+      expect(
+        within(legend)
+          .getAllByRole("listitem")
+          .map((item) => item.textContent),
+      ).toEqual([
+        "ORG_CHART$OWNERSHIP_KEPT",
+        "auth teamservices/auth",
+        "billing teamservices/billing",
+      ]);
+      expect(
+        within(legend).getByRole("link", { name: "billing team" }),
+      ).toHaveAttribute("href", "/org/billing");
+    });
+
+    it("opens the directories that are divided and closes the ones one team owns", async () => {
+      serveOwnership();
+      const user = userEvent.setup();
+      renderWithProviders(<OrgChartView nodeId={null} />);
+      const map = await ownershipMap();
+
+      const divided = within(map).getByTestId("ownership-dir-services");
+      const owned = within(map).getByTestId("ownership-dir-services/auth");
+
+      expect(divided).toHaveAttribute("aria-expanded", "true");
+      expect(owned).toHaveAttribute("aria-expanded", "false");
+      // A directory one team owns says so without being opened.
+      expect(ownerOf(owned)).toBeInTheDocument();
+      expect(
+        within(divided).queryByRole("img", {
+          name: "ORG_CHART$OWNERSHIP_OWNER",
+        }),
+      ).toBeNull();
+      expect(
+        within(map).queryByTestId("ownership-file-services/auth/login.py"),
+      ).toBeNull();
+
+      await user.click(owned);
+
+      expect(
+        ownerOf(
+          within(map).getByTestId("ownership-file-services/auth/login.py"),
+        ),
+      ).toBeInTheDocument();
+    });
+
+    it("gives each team a swatch of its own and what the team kept an outline", async () => {
+      serveOwnership();
+      renderWithProviders(<OrgChartView nodeId={null} />);
+      const map = await ownershipMap();
+
+      const swatch = (testId: string) =>
+        ownerOf(within(map).getByTestId(testId)).className;
+
+      expect(swatch("ownership-dir-services/auth")).not.toBe(
+        swatch("ownership-dir-services/billing"),
+      );
+      expect(swatch("ownership-file-README.md")).toBe(
+        swatch("ownership-file-services/shared.py"),
+      );
+      expect(swatch("ownership-file-README.md")).not.toBe(
+        swatch("ownership-dir-services/auth"),
+      );
+    });
+
+    it("warns of files that would conflict, on the map and on the teams' cards", async () => {
+      serveOwnership({
+        collisions: [
+          { path: "services/auth/login.py", node_ids: ["auth", "billing"] },
+        ],
+      });
+      renderWithProviders(<OrgChartView nodeId={null} />);
+      const map = await ownershipMap();
+
+      expect(within(map).getByRole("alert")).toHaveTextContent(
+        "services/auth/login.py: ORG_CHART$COLLISION_BETWEEN",
+      );
+      // The directory is closed, so it carries the warning for the file.
+      expect(
+        within(
+          within(map).getByTestId("ownership-dir-services/auth"),
+        ).getByRole("img", { name: "ORG_CHART$COLLISIONS" }),
+      ).toBeInTheDocument();
+      const mark = { name: "ORG_CHART$COLLISION_MARK" };
+      expect(within(card("auth")).getByRole("img", mark)).toBeInTheDocument();
+      expect(
+        within(card("billing")).getByRole("img", mark),
+      ).toBeInTheDocument();
+      expect(within(card("search")).queryByRole("img", mark)).toBeNull();
+      expect(within(card("root")).queryByRole("img", mark)).toBeNull();
+    });
+
+    it("says when conflicts were not looked for, when the list is cut, and when there are no files", async () => {
+      serveOwnership({ collisions_checked: false, truncated: true, files: [] });
+      renderWithProviders(<OrgChartView nodeId={null} />);
+      const map = await ownershipMap();
+
+      expect(map).toHaveTextContent("ORG_CHART$COLLISIONS_UNCHECKED");
+      expect(map).toHaveTextContent("ORG_CHART$OWNERSHIP_TRUNCATED");
+      expect(map).toHaveTextContent("ORG_CHART$OWNERSHIP_EMPTY");
+      expect(within(map).queryByRole("alert")).toBeNull();
+    });
+
+    it("asks for the team the page is on", async () => {
+      const asked = serveOwnership({ node_id: "auth", owners: [] });
+      renderWithProviders(<OrgChartView nodeId="auth" />);
+      await ownershipMap();
+
+      expect(asked).toEqual(["auth"]);
+    });
+
+    it("can be closed, and stays closed on the next visit", async () => {
+      serveOwnership();
+      const user = userEvent.setup();
+      renderWithProviders(<OrgChartView nodeId={null} />);
+      const map = await ownershipMap();
+
+      await user.click(
+        within(map).getByRole("button", { name: /ORG_CHART\$OWNERSHIP_TITLE/ }),
+      );
+
+      expect(within(map).queryByTestId("ownership-legend")).toBeNull();
+      expect(
+        JSON.parse(window.localStorage.getItem("openhands-org-chart")!).state,
+      ).toMatchObject({ ownershipOpen: false });
+    });
+
+    it("draws no map when the server does not have one", async () => {
+      server.use(
+        http.get("*/api/director/org/nodes/:nodeId/ownership", () =>
+          HttpResponse.json({ detail: "Not Found" }, { status: 404 }),
+        ),
+      );
+      renderWithProviders(<OrgChartView nodeId={null} />);
+      await findCard("root");
+      await findCard("auth");
+
+      expect(
+        screen.queryByRole("region", { name: "ORG_CHART$OWNERSHIP_TITLE" }),
+      ).toBeNull();
+    });
+  });
 });
 
 describe("mock mode", () => {
@@ -1360,6 +1601,13 @@ describe("mock mode", () => {
 
     expect(await findCard("payments.worker")).toBeInTheDocument();
     expect(cardIds()).toHaveLength(4);
+    expect(
+      within(
+        await screen.findByRole("region", {
+          name: "ORG_CHART$OWNERSHIP_TITLE",
+        }),
+      ).getByTestId("ownership-dir-services/payments/worker"),
+    ).toBeInTheDocument();
     // One escalation has reached the human; the other is still with a team.
     expect(within(escalations()).getAllByRole("listitem")).toHaveLength(1);
 

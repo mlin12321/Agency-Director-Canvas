@@ -4,6 +4,7 @@ import {
   type BoundaryMemory,
   type NodeBlackboard,
   type NodeId,
+  type NodeOwnership,
   type OrgEvent,
   type OrgNode,
   type OrgSummary,
@@ -104,6 +105,10 @@ export const DirectorClient = {
 
   getNodeBlackboard(nodeId: NodeId) {
     return requestJson<NodeBlackboard>(nodePath(nodeId, "blackboard"));
+  },
+
+  getNodeOwnership(nodeId: NodeId) {
+    return requestJson<NodeOwnership>(nodePath(nodeId, "ownership"));
   },
 
   teach(nodeId: NodeId, rule: string) {

@@ -17,7 +17,9 @@ export const STATUS_LABEL_KEYS: Record<NodeStatus, I18nKey> = {
 
 export const STATUS_DOT_CLASSES: Record<NodeStatus, string> = {
   idle: "bg-muted",
-  working: "bg-info",
+  // The theme has no orange; these steps stay apart from the red and green
+  // beside them on a light and on a dark surface.
+  working: "bg-[#d9730d] dark:bg-[#f08a24]",
   done: "bg-success",
   blocked: "bg-danger",
 };

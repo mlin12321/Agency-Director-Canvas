@@ -1,5 +1,5 @@
 import React from "react";
-import { TriangleAlert } from "lucide-react";
+import { GitMerge, TriangleAlert } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { OrgNode } from "#/api/director/types";
 import { NavigationLink } from "#/components/shared/navigation-link";
@@ -14,6 +14,8 @@ interface NodeCardProps {
   node: OrgNode;
   /** The team the page is on. Its card opens its details. */
   current: boolean;
+  /** Its committed work conflicts with another team's. */
+  collides?: boolean;
   onOpenDetails: () => void;
   /** Bring the current team to the middle of a chart that scrolls. */
   centerInScroller?: boolean;
@@ -31,6 +33,7 @@ const MAIN_CLASS =
 export function NodeCard({
   node,
   current,
+  collides = false,
   onOpenDetails,
   centerInScroller = false,
 }: NodeCardProps) {
@@ -64,6 +67,16 @@ export function NodeCard({
         <span className="min-w-0 flex-1 truncate text-xs font-medium text-contrast">
           {node.title}
         </span>
+        {collides ? (
+          <span
+            role="img"
+            aria-label={t(I18nKey.ORG_CHART$COLLISION_MARK)}
+            title={t(I18nKey.ORG_CHART$COLLISION_MARK)}
+            className="flex shrink-0 text-feedback-error"
+          >
+            <GitMerge width={11} height={11} aria-hidden="true" />
+          </span>
+        ) : null}
         {node.escalation_count > 0 ? (
           <span
             role="img"
