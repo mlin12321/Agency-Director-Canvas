@@ -37,7 +37,9 @@ export function ChartToolbar() {
             onClick={() => setView(mode)}
             className={cn(
               BUTTON,
-              view === mode ? "bg-surface-raised text-contrast" : null,
+              view === mode
+                ? "bg-surface-raised text-contrast director:bg-primary director:text-on-accent director:hover:bg-primary director:hover:text-on-accent"
+                : null,
             )}
           >
             {t(label)}

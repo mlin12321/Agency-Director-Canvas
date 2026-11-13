@@ -1,5 +1,9 @@
 import { type ColorThemeKey } from "./types";
-import { COLOR_THEMES, DEFAULT_COLOR_THEME } from "./definitions";
+import {
+  COLOR_THEMES,
+  DEFAULT_COLOR_THEME,
+  UNAPPLIED_COLOR_THEME,
+} from "./definitions";
 
 const STORAGE_KEY = "openhands-color-theme";
 let activeColorTheme: ColorThemeKey | null = null;
@@ -29,7 +33,7 @@ export function persistColorTheme(key: ColorThemeKey): void {
 
 /** Applied theme only: embedded roots must not adopt unapplied app preferences. */
 export function getActiveColorTheme(): ColorThemeKey {
-  return activeColorTheme ?? DEFAULT_COLOR_THEME;
+  return activeColorTheme ?? UNAPPLIED_COLOR_THEME;
 }
 
 export function subscribeColorTheme(listener: () => void): () => void {

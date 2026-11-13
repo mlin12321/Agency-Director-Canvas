@@ -4,6 +4,31 @@ Canvas has three rendering systems: scoped CSS/HeroUI for the interface, Prism
 and Monaco for code, and xterm for terminal output. A palette must cover all of
 them; changing the page background alone is not a complete theme.
 
+## Director
+
+Director (`director`) is the default palette: white, then black, then one
+bright red, in that order of prominence.
+
+- **White:** the page and every panel (the terminal's too, as xterm paints no
+  background of its own). Very light grays mark an area within a panel.
+- **Black:** text only. Outlines are gray, as light as the 3:1 boundary rule
+  for controls allows.
+- **Bright red:** what is filled, chosen or drawn. Primary actions and
+  switched-on controls are filled red with a white label; the selected row is
+  tinted; icons, the lines that join teams in the org chart
+  (`--oh-line-accent`, which every other palette leaves on its border colour)
+  and the focus ring are red. Red that is read as text (links, danger) is one
+  step deeper so it stays legible on the gray areas.
+
+Icons are coloured by one rule in `tailwind.css`; an icon that carries a
+status, warning or success colour, has a `color` attribute, or sits on a
+filled control keeps its own. Classes that should apply in this palette only
+use the `director:` variant, e.g. `director:bg-primary`. Success and warning
+keep the Light+ inks, and code, diffs and terminal output reuse the Light+
+palettes unchanged. A reader who already chose a palette keeps it, and an
+embedded root that applies none stays on the stylesheet's dark defaults
+(`UNAPPLIED_COLOR_THEME`).
+
 ## Paper
 
 Paper (`paper`) is an optional light palette printed like an old newspaper:
@@ -14,7 +39,7 @@ inks that stay readable as text; there is no blue in the interface. Code,
 diffs and terminal output follow the same inks: reserved words in bold ink,
 comments faded, literals in the spot and status inks. Select it in Settings →
 Application → Color Theme. It uses the existing `setColorTheme` and browser
-preference; OpenHands-Neutral remains the default. Paper stays light
+preference. Paper stays light
 regardless of the operating system's appearance.
 
 Newsreader is used only for `h1`, `h2`, and `.heading`. Dense controls, message

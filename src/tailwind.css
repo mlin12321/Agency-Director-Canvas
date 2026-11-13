@@ -121,6 +121,7 @@
 
   /* Semantic border aliases */
   --color-border: var(--oh-border);
+  --color-line-accent: var(--oh-line-accent);
   --color-scroll-fade: var(--oh-scroll-fade-from, var(--oh-color-base));
   --color-border-input: var(--oh-border-input);
   /* Existing dark border for informational Git chips and Workspace mode. */
@@ -259,6 +260,7 @@
   --oh-border-width: 1px;
   --oh-field-border-width: 1px;
   --oh-border: var(--cool-grey-700);
+  --oh-line-accent: var(--oh-border); /* lines that join things, e.g. org teams */
   --oh-border-input: var(
     --cool-grey-700
   ); /* unified with --oh-border; same stroke weight everywhere */
@@ -358,6 +360,21 @@
   --scrollbar-gutter: auto;
   --scrollbar-width: thin;
   --scrollbar-color: var(--oh-scrollbar) transparent;
+}
+
+/* Classes that apply in the Director palette only, e.g. director:bg-primary. */
+@custom-variant director (&:where([data-color-theme="director"], [data-color-theme="director"] *));
+
+/*
+ * Director draws its icons in the palette's red. An icon that says something
+ * by its colour (a warning, a success, a status), or that sits on a filled
+ * control, keeps the colour it was given.
+ */
+[data-color-theme="director"] svg:not([color], [class*="status-"], [class*="feedback-"], [class*="success"], [class*="warning"], [class*="text-on-"], [class*="contrast-foreground"], [class*="text-muted"]) {
+  color: var(--oh-color-primary);
+}
+[data-color-theme="director"] :is([class*="feedback-"], [class*="text-success"], [class*="text-warning"], [class*="text-on-"], [class*="contrast-foreground"], :disabled, [aria-disabled="true"], .mermaid) svg {
+  color: inherit;
 }
 
 @layer base {

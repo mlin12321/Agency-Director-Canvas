@@ -19,6 +19,7 @@ const luminance = (hex: string) => {
 describe("getSyntaxHighlighterTheme", () => {
   it("maps the app themes to matching Prism palettes", () => {
     expect(getSyntaxHighlighterTheme("light-plus")).toBe(vs);
+    expect(getSyntaxHighlighterTheme("director")).toBe(vs);
     expect(getSyntaxHighlighterTheme("solarized-light")).toBe(solarizedlight);
     expect(getSyntaxHighlighterTheme("openhands-neutral")).toBe(vscDarkPlus);
   });

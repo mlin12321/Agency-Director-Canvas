@@ -88,6 +88,7 @@ const palettes: Record<ColorThemeKey, ITheme> = {
   "light-plus": light,
   "solarized-light": solarized,
   paper,
+  director: light,
 };
 
 export function getTerminalTheme(

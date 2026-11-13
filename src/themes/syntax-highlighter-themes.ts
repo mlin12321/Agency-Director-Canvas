@@ -57,6 +57,7 @@ const SYNTAX_THEMES: Record<ColorThemeKey, typeof vs> = {
   "light-plus": vs,
   "solarized-light": solarizedlight,
   paper,
+  director: vs,
 };
 
 export function getSyntaxHighlighterTheme(theme: ColorThemeKey) {

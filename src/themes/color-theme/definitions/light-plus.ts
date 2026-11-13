@@ -17,7 +17,7 @@ const LIGHT_PLUS_SCALE = {
   "--cool-grey-975": "#F8F8F8",
 };
 
-const LIGHT_PLUS_HEROUI = {
+export const LIGHT_PLUS_HEROUI = {
   "--heroui-background": "0 0% 100%",
   "--heroui-background-foreground": "0 0% 12.16%",
   "--heroui-foreground-50": "0 0% 98%",

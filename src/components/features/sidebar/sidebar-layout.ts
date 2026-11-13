@@ -20,7 +20,8 @@ export function sidebarHeaderRowClassName(collapsed: boolean): string {
 }
 
 export const SIDEBAR_ROW_INTERACTIVE_CLASS = {
-  active: "bg-tertiary text-contrast font-normal",
+  active:
+    "bg-tertiary text-contrast font-normal director:bg-interactive-selected",
   idle: "text-muted hover:text-contrast hover:bg-surface-raised",
 } as const;
 
