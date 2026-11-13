@@ -122,6 +122,7 @@ export const AUTOMATION_WEBHOOK_QUERY_KEYS = {
 } as const;
 
 export const DIRECTOR_QUERY_KEYS = {
+  org: (backendId: string) => ["director", "org", backendId] as const,
   blackboard: (backendId: string, nodeId: string) =>
     ["director", "blackboard", backendId, nodeId] as const,
 } as const;

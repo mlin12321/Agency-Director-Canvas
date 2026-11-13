@@ -65,6 +65,31 @@ export interface Escalation {
 
 export type StatusCounts = Record<NodeStatus, number>;
 
+export type SplitStatus = "proposed" | "refine_requested" | "approved";
+
+/** A sub-team an IC proposes to hand part of its boundary to. */
+export interface SplitChild {
+  title: string;
+  /** Directory the sub-team owns, inside the proposing node's boundary. */
+  path: string;
+  writable: string[];
+  readonly: string[];
+  isolation: IsolationMode;
+  /** What the sub-team is to deliver. */
+  task: string;
+}
+
+/** An IC's proposal to split its boundary, for its Manager to decide. */
+export interface SplitProposal {
+  children: SplitChild[];
+  contracts: string;
+  status: SplitStatus;
+  /** What the Manager wants changed, when it asked. */
+  feedback: string;
+  /** ISO 8601 timestamp. */
+  proposed_at: string;
+}
+
 export interface OrgNode {
   id: NodeId;
   parent_id: NodeId | null;
@@ -79,6 +104,8 @@ export interface OrgNode {
   spec_summary: string;
   /** Open escalations this node raised, wherever above they are held. */
   escalations: Escalation[];
+  /** A split of this node's boundary that is not carried out yet. */
+  pending_split: SplitProposal | null;
   /**
    * Status of every node below this one, so a parent can summarize its whole
    * subtree without the client loading it.
@@ -86,6 +113,30 @@ export interface OrgNode {
   descendant_counts: StatusCounts;
   /** Escalations from this node or below that wait on the human. */
   escalation_count: number;
+}
+
+/** Whether the director has an org, and where it would keep one. */
+export interface OrgSummary {
+  /** `null` when no org has been started. */
+  root_id: NodeId | null;
+  node_count: number;
+  /** The directory the org works in. */
+  repo_path: string;
+  /** An org can only be started in a git repository. */
+  is_git_repository: boolean;
+  /** The tree is a fixed sample; its agents are not running. */
+  fixture: boolean;
+}
+
+/** Start an org: a root team that works on `task`. */
+export interface CreateOrgRequest {
+  title: string;
+  task: string;
+  /**
+   * How to start the root team's IC, as for a normal conversation. Every
+   * other agent of the org is derived from it.
+   */
+  conversation: Record<string, unknown>;
 }
 
 /** An escalation that waits on the human, with the nodes it came up through. */

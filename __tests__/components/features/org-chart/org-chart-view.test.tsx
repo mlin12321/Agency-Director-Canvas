@@ -8,23 +8,37 @@ import type {
   NodeBlackboard,
   NodeStatus,
   OrgEvent,
+  OrgSummary,
+  SplitProposal,
 } from "#/api/director/types";
+import { buildStartConversationRequestWithEncryptedSettings } from "#/api/agent-server-adapter";
+import SettingsService from "#/api/settings-service/settings-service.api";
+import { resolveConversationLaunch } from "#/hooks/mutation/resolve-conversation-launch";
 import { subscribeOrgTree } from "#/api/director/director-client";
 import * as activeStore from "#/api/backend-registry/active-store";
 import { OrgChartView } from "#/components/features/org-chart/org-chart-view";
-import { useNavigation } from "#/context/navigation-context";
 import { server } from "#/mocks/node";
 import { useOrgChartStore } from "#/stores/org-chart-store";
 import { renderWithProviders } from "test-utils";
 import { OrgStore, type OrgNodeInput } from "./fake-org-store.mjs";
 
-// The real conversation view needs a live agent server. What matters here is
-// that the inspector mounts it re-targeted at the inspected agent.
-vi.mock("#/routes/conversation", () => ({
-  ConversationView: () => {
-    const { conversationId } = useNavigation();
-    return <div data-testid="conversation-view">{conversationId}</div>;
-  },
+// The real conversation UI needs a live agent server. What matters here is
+// that the inspector mounts it for the inspected agent.
+vi.mock("#/components/features/org-chart/agent-conversation", () => ({
+  AgentConversation: ({ conversationId }: { conversationId: string }) => (
+    <div data-testid="conversation-view">{conversationId}</div>
+  ),
+}));
+
+// Which profile and LLM a launch uses, and the request built from them, are
+// the conversation launch's business; an org only passes them on.
+vi.mock("#/hooks/mutation/resolve-conversation-launch", () => ({
+  resolveConversationLaunch: vi.fn(),
+  assertLaunchLlmReady: vi.fn(),
+}));
+vi.mock("#/api/agent-server-adapter", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("#/api/agent-server-adapter")>()),
+  buildStartConversationRequestWithEncryptedSettings: vi.fn(),
 }));
 
 const POD: AgentRef[] = [
@@ -38,6 +52,7 @@ function input(
   status: NodeStatus,
   path: string,
   escalations: Escalation[] = [],
+  pendingSplit: SplitProposal | null = null,
 ): OrgNodeInput {
   return {
     id,
@@ -51,6 +66,7 @@ function input(
     status,
     spec_summary: `Spec for ${id}`,
     escalations,
+    pending_split: pendingSplit,
   };
 }
 
@@ -789,7 +805,7 @@ describe("OrgChartView", () => {
       renderWithProviders(<OrgChartView nodeId={null} />);
       await findCard("root");
 
-      const items = within(escalations()).getAllByRole("link");
+      const items = within(escalations()).getAllByRole("listitem");
 
       // The token decision is still with the auth team: not the human's yet.
       expect(items).toHaveLength(1);
@@ -798,7 +814,11 @@ describe("OrgChartView", () => {
       expect(items[0]).toHaveTextContent("root team › billing team");
       expect(items[0]).toHaveTextContent("ORG_CHART$ESCALATION_PASSED_UP");
       expect(items[0]).toHaveTextContent("root team: Refunds need a person");
-      expect(items[0]).toHaveAttribute("href", "/org/billing");
+      expect(
+        within(items[0]).getByRole("link", {
+          name: "root team › billing team",
+        }),
+      ).toHaveAttribute("href", "/org/billing");
       expect(
         within(escalations()).queryByText("Pick a token format"),
       ).toBeNull();
@@ -841,7 +861,7 @@ describe("OrgChartView", () => {
       await new Promise((resolve) => {
         setTimeout(resolve, 100);
       });
-      expect(within(escalations()).getAllByRole("link")).toHaveLength(1);
+      expect(within(escalations()).getAllByRole("listitem")).toHaveLength(1);
 
       // Root passes it up too: nobody is left but the human.
       store.upsert(
@@ -857,9 +877,9 @@ describe("OrgChartView", () => {
         ]),
       );
 
-      const added = await within(escalations()).findByRole("link", {
-        name: /Pick a token format/,
-      });
+      const added = (
+        await within(escalations()).findByText("Pick a token format")
+      ).closest("li") as HTMLElement;
       expect(added).toHaveTextContent("auth team: Affects billing too");
       expect(added).toHaveTextContent("root team: A product call");
       expect(added).toHaveTextContent("ORG_CHART$ESCALATION_DECISION");
@@ -885,7 +905,271 @@ describe("OrgChartView", () => {
       expect(
         within(escalations()).getByText("ORG_CHART$ESCALATIONS_EMPTY"),
       ).toBeInTheDocument();
-      expect(within(escalations()).queryByRole("link")).toBeNull();
+      expect(within(escalations()).queryByRole("listitem")).toBeNull();
+    });
+  });
+
+  describe("answering an escalation", () => {
+    function answerHandler(status = 200) {
+      const answers: Array<{ nodeId: string; id: string; answer: string }> = [];
+      server.use(
+        http.post(
+          "*/api/director/org/nodes/:nodeId/escalations/:id/answer",
+          async ({ params, request }) => {
+            const { answer } = (await request.json()) as { answer: string };
+            answers.push({
+              nodeId: String(params.nodeId),
+              id: String(params.id),
+              answer,
+            });
+            if (status !== 200) {
+              return HttpResponse.json({ detail: "no" }, { status });
+            }
+            return HttpResponse.json(
+              store.upsert(
+                input("billing", "root", "working", "services/billing"),
+              ),
+            );
+          },
+        ),
+      );
+      return answers;
+    }
+
+    it("sends the answer for the team that raised it, and drops the entry once the server settles it", async () => {
+      const answers = answerHandler();
+      const user = userEvent.setup();
+      renderWithProviders(<OrgChartView nodeId={null} />);
+      await findCard("root");
+
+      const send = within(escalations()).getByRole("button", {
+        name: "ORG_CHART$ESCALATION_ANSWER_SUBMIT",
+      });
+      expect(send).toBeDisabled();
+      await user.type(
+        within(escalations()).getByLabelText(
+          "ORG_CHART$ESCALATION_ANSWER_LABEL",
+        ),
+        "  Refund both charges.  ",
+      );
+      await user.click(send);
+
+      await waitFor(() =>
+        expect(within(escalations()).queryByRole("listitem")).toBeNull(),
+      );
+      expect(answers).toEqual([
+        {
+          nodeId: "billing",
+          id: "double-charge",
+          answer: "Refund both charges.",
+        },
+      ]);
+      expect(badge("root")).toBeNull();
+    });
+
+    it("keeps the entry and the answer when the server refuses it", async () => {
+      answerHandler(409);
+      const user = userEvent.setup();
+      renderWithProviders(<OrgChartView nodeId={null} />);
+      await findCard("root");
+
+      const box = within(escalations()).getByLabelText(
+        "ORG_CHART$ESCALATION_ANSWER_LABEL",
+      );
+      await user.type(box, "Refund both charges.");
+      await user.click(
+        within(escalations()).getByRole("button", {
+          name: "ORG_CHART$ESCALATION_ANSWER_SUBMIT",
+        }),
+      );
+
+      expect(await within(escalations()).findByRole("alert")).toHaveTextContent(
+        "ORG_CHART$ESCALATION_ANSWER_FAILED",
+      );
+      expect(box).toHaveValue("Refund both charges.");
+      expect(
+        within(escalations()).getByRole("button", {
+          name: "ORG_CHART$ESCALATION_ANSWER_SUBMIT",
+        }),
+      ).toBeEnabled();
+    });
+  });
+
+  describe("a split that is not carried out yet", () => {
+    it("shows where it stands and the sub-teams it proposes on the team's card", async () => {
+      store.upsert(
+        input("search", "root", "working", "services/search", [], {
+          children: [
+            {
+              title: "indexer",
+              path: "services/search/indexer",
+              writable: [],
+              readonly: [],
+              isolation: "shared",
+              task: "Build the indexer",
+            },
+            {
+              title: "query",
+              path: "services/search/query",
+              writable: [],
+              readonly: [],
+              isolation: "shared",
+              task: "Build the query API",
+            },
+          ],
+          contracts: "",
+          status: "refine_requested",
+          feedback: "Overlaps with auth",
+          proposed_at: "2026-11-12T00:00:00Z",
+        }),
+      );
+      const user = userEvent.setup();
+      renderWithProviders(<OrgChartView nodeId={null} />);
+      await findCard("search");
+
+      for (let presses = 0; presses < 12; presses += 1) {
+        if (document.activeElement === teamLink("search")) break;
+        await user.tab();
+      }
+      expect(teamLink("search")).toHaveFocus();
+
+      const tip = await screen.findByRole("tooltip");
+      expect(
+        within(tip).getByText("ORG_CHART$SPLIT_REFINE_REQUESTED"),
+      ).toBeInTheDocument();
+      expect(within(tip).getByText("indexer, query")).toBeInTheDocument();
+    });
+  });
+
+  describe("a director without an org", () => {
+    const SUMMARY: OrgSummary = {
+      root_id: null,
+      node_count: 0,
+      repo_path: "/work/shop",
+      is_git_repository: true,
+      fixture: false,
+    };
+
+    function withoutOrg(summary: OrgSummary = SUMMARY) {
+      store = new OrgStore();
+      const started: unknown[] = [];
+      server.use(
+        streamHandler(),
+        http.get("*/api/director/org", () => HttpResponse.json(summary)),
+        http.post("*/api/director/org", async ({ request }) => {
+          started.push(await request.json());
+          return HttpResponse.json(
+            store.upsert(input("root", null, "working", "")),
+            { status: 201 },
+          );
+        }),
+      );
+      return started;
+    }
+
+    async function fillAndSubmit(user: ReturnType<typeof userEvent.setup>) {
+      const form = await screen.findByRole("form", {
+        name: "ORG_CHART$START_TITLE",
+      });
+      const submit = within(form).getByRole("button", {
+        name: "ORG_CHART$START_SUBMIT",
+      });
+      expect(submit).toBeDisabled();
+      await user.type(
+        within(form).getByLabelText("ORG_CHART$START_NAME_LABEL"),
+        "Shop",
+      );
+      await user.type(
+        within(form).getByLabelText("ORG_CHART$START_TASK_LABEL"),
+        "Build the checkout",
+      );
+      await user.click(submit);
+    }
+
+    beforeEach(() => {
+      vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+        {} as Awaited<ReturnType<typeof SettingsService.getSettings>>,
+      );
+      vi.mocked(resolveConversationLaunch).mockResolvedValue({
+        agentProfileId: "profile-1",
+        agentProfileKind: "openhands",
+      });
+      vi.mocked(
+        buildStartConversationRequestWithEncryptedSettings,
+      ).mockImplementation(async (options) => ({
+        conversation_id: options.conversationId,
+        workspace: { working_dir: options.workingDir },
+        worktree: options.worktree,
+      }));
+    });
+
+    it("starts one from a name and a task, as a conversation in the director's repository, and follows it at once", async () => {
+      const started = withoutOrg();
+      const user = userEvent.setup();
+      renderWithProviders(<OrgChartView nodeId={null} />);
+
+      await fillAndSubmit(user);
+
+      // Well inside the stream's first retry delay.
+      expect(await findCard("root", 800)).toBeInTheDocument();
+      expect(started).toEqual([
+        {
+          title: "Shop",
+          task: "Build the checkout",
+          conversation: expect.objectContaining({
+            conversation_id: expect.any(String),
+            workspace: { working_dir: "/work/shop" },
+            worktree: true,
+          }),
+        },
+      ]);
+    });
+
+    it("refuses an ACP agent profile without asking the server", async () => {
+      const started = withoutOrg();
+      vi.mocked(resolveConversationLaunch).mockResolvedValue({
+        agentProfileId: "profile-acp",
+        agentProfileKind: "acp",
+      });
+      const user = userEvent.setup();
+      renderWithProviders(<OrgChartView nodeId={null} />);
+
+      await fillAndSubmit(user);
+
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "ORG_CHART$START_ACP_UNSUPPORTED",
+      );
+      expect(started).toEqual([]);
+    });
+
+    it("shows why the server refused", async () => {
+      withoutOrg();
+      server.use(
+        http.post("*/api/director/org", () =>
+          HttpResponse.json(
+            { detail: "The server is at its run limit" },
+            { status: 429 },
+          ),
+        ),
+      );
+      const user = userEvent.setup();
+      renderWithProviders(<OrgChartView nodeId={null} />);
+
+      await fillAndSubmit(user);
+
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "ORG_CHART$START_FAILED",
+      );
+    });
+
+    it("says an org needs a git repository when the director's directory is not one", async () => {
+      withoutOrg({ ...SUMMARY, is_git_repository: false });
+      renderWithProviders(<OrgChartView nodeId={null} />);
+
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "ORG_CHART$START_NEEDS_GIT",
+      );
+      expect(screen.queryByRole("form")).toBeNull();
     });
   });
 
@@ -1069,7 +1353,7 @@ describe("mock mode", () => {
     expect(await findCard("payments.worker")).toBeInTheDocument();
     expect(cardIds()).toHaveLength(4);
     // One escalation has reached the human; the other is still with a team.
-    expect(within(escalations()).getAllByRole("link")).toHaveLength(1);
+    expect(within(escalations()).getAllByRole("listitem")).toHaveLength(1);
 
     await showWholeOrg(user);
     await findCard("identity.api");

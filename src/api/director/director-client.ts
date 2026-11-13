@@ -2,12 +2,16 @@ import { getEffectiveLocalBackend } from "../backend-registry/active-store";
 import {
   DIRECTOR_BASE_PATH,
   type BoundaryMemory,
+  type CreateOrgRequest,
   type NodeBlackboard,
   type NodeId,
   type OrgEvent,
+  type OrgNode,
+  type OrgSummary,
 } from "./types";
 
 const SESSION_KEY_HEADER = "X-Session-API-Key";
+const ORG_PATH = "/org";
 const TREE_STREAM_PATH = "/org/tree-stream";
 const NODE_QUERY_PARAM = "node";
 const FULL_QUERY_PARAM = "full";
@@ -60,17 +64,46 @@ async function requestJson<T>(path: string, init: RequestInit = {}) {
   return (await response.json()) as T;
 }
 
+function postJson<T>(path: string, body: unknown) {
+  return requestJson<T>(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
 export const DirectorClient = {
+  /** Whether the director has an org; `root_id` is null when it has none. */
+  getOrg() {
+    return requestJson<OrgSummary>(ORG_PATH);
+  },
+
+  /** Start an org and brief the IC of its root team with the task. */
+  createOrg(request: CreateOrgRequest) {
+    return postJson<OrgNode>(ORG_PATH, request);
+  },
+
+  /**
+   * Answer an escalation that waits on the human, which settles it.
+   *
+   * @param nodeId The team that raised the escalation.
+   */
+  answerEscalation(nodeId: NodeId, escalationId: string, answer: string) {
+    return postJson<OrgNode>(
+      nodePath(
+        nodeId,
+        `escalations/${encodeURIComponent(escalationId)}/answer`,
+      ),
+      { answer },
+    );
+  },
+
   getNodeBlackboard(nodeId: NodeId) {
     return requestJson<NodeBlackboard>(nodePath(nodeId, "blackboard"));
   },
 
   teach(nodeId: NodeId, rule: string) {
-    return requestJson<BoundaryMemory>(nodePath(nodeId, "teach"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ rule }),
-    });
+    return postJson<BoundaryMemory>(nodePath(nodeId, "teach"), { rule });
   },
 };
 
