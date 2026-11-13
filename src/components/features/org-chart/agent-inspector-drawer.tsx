@@ -34,7 +34,7 @@ const TeamChanges = React.lazy(() =>
 );
 
 const TAB_CLASS =
-  "flex items-center gap-2 rounded-md border border-border px-2.5 py-1 text-sm text-contrast hover:bg-surface-raised";
+  "flex shrink-0 items-center gap-2 whitespace-nowrap rounded-md border border-border px-2.5 py-1 text-sm text-contrast hover:bg-surface-raised";
 const TAB_CHOSEN_CLASS =
   "bg-surface-raised director:border-primary director:bg-interactive-selected";
 

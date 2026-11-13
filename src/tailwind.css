@@ -373,8 +373,19 @@
 [data-color-theme="director"] svg:not([color], [class*="status-"], [class*="feedback-"], [class*="success"], [class*="warning"], [class*="text-on-"], [class*="contrast-foreground"], [class*="text-muted"]) {
   color: var(--oh-color-primary);
 }
-[data-color-theme="director"] :is([class*="feedback-"], [class*="text-success"], [class*="text-warning"], [class*="text-on-"], [class*="contrast-foreground"], :disabled, [aria-disabled="true"], .mermaid) svg {
+[data-color-theme="director"] :is([class*="feedback-"], [class*="text-success"], [class*="text-warning"], [class*="text-on-"], [class*="contrast-foreground"], :disabled, [aria-disabled="true"], .mermaid, .bg-primary, .director\:bg-primary, .bg-accent, .bg-danger, .bg-status-error, .bg-feedback-error) svg {
   color: inherit;
+}
+
+/*
+ * In Director, whatever is filled with red has white text and icons unless
+ * it names a colour of its own: this sits in the base layer, below every
+ * text utility. A tint (bg-danger/10) is not a fill and is left alone.
+ */
+@layer base {
+  [data-color-theme="director"] :where(.bg-primary, .director\:bg-primary, .bg-accent, .bg-danger, .bg-status-error, .bg-feedback-error) {
+    color: var(--oh-accent-foreground);
+  }
 }
 
 @layer base {
