@@ -31,7 +31,27 @@ export interface AgentRef {
   /** `null` until the director has started a conversation for this agent. */
   conversation_id: string | null;
   status: string;
+  /** Absent on a server that does not say; such an agent is `openhands`. */
+  kind?: AgentKind;
+  /**
+   * Which external agent an `acp` agent is, such as `claude-code` or
+   * `codex`; `null` when the server could not tell.
+   */
+  acp_server?: string | null;
 }
+
+/**
+ * `acp`: an external agent, such as Claude Code or Codex, that runs its own
+ * tools and reaches the director's through an MCP server.
+ */
+export type AgentKind = "openhands" | "acp";
+
+/**
+ * How one team is held to its boundary. `merge`: its agent runs its own
+ * tools and no sandbox holds it, so what it commits outside its directory is
+ * refused only when its work is merged into the team above.
+ */
+export type TeamEnforcement = BoundaryEnforcement | "merge";
 
 export type EscalationKind = "critical_issue" | "design_decision";
 
@@ -162,6 +182,13 @@ export interface OrgNode {
    */
   waiting_to_start?: boolean;
   /**
+   * The agent profile the team's agents were started from; `null` when
+   * they were derived from the team above.
+   */
+  agent_profile?: string | null;
+  /** How this team is held to its boundary; `null` until its IC ran. */
+  boundary_enforcement?: TeamEnforcement | null;
+  /**
    * Status of every node below this one, so a parent can summarize its whole
    * subtree without the client loading it.
    */
@@ -179,6 +206,12 @@ export interface DirectorSettings {
   max_agents: number;
   /** The most levels of teams; the root team is level 1. */
   max_depth: number;
+  /**
+   * Names of the agent profiles a team may give a sub-team in place of its
+   * own agent. Empty: every team runs on the agent of the team above.
+   * Absent on a server that has no such setting.
+   */
+  allowed_profiles?: string[];
 }
 
 /** The settings, beside what the org has now. */

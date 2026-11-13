@@ -12,9 +12,10 @@ import {
 } from "#/components/shared/modals/modal-body";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { DIRECTOR_QUERY_KEYS } from "#/hooks/query/query-keys";
+import { useAgentProfiles } from "#/hooks/query/use-agent-profiles";
 import { I18nKey } from "#/i18n/declaration";
 
-const DEFAULTS = { max_agents: 64, max_depth: 8 };
+const DEFAULTS = { max_agents: 64, max_depth: 8, allowed_profiles: [] };
 const INPUT = "rounded-md border border-border bg-canvas-base px-3 py-2";
 
 function whole(text: string, least: number) {
@@ -34,11 +35,23 @@ function SettingsForm({
   const queryClient = useQueryClient();
   const [agents, setAgents] = React.useState(String(state.max_agents));
   const [depth, setDepth] = React.useState(String(state.max_depth));
+  // Absent on a server that cannot give a sub-team another agent.
+  const [allowed, setAllowed] = React.useState(state.allowed_profiles);
+  const profiles = useAgentProfiles({ enabled: allowed !== undefined }).data;
+  // A profile that was allowed and has since been deleted can still be
+  // unticked.
+  const names = [
+    ...new Set([
+      ...(profiles?.profiles.map((profile) => profile.name) ?? []),
+      ...(allowed ?? []),
+    ]),
+  ];
   const save = useMutation({
     mutationFn: () =>
       DirectorClient.updateSettings({
         max_agents: Number(agents),
         max_depth: Number(depth),
+        ...(allowed ? { allowed_profiles: allowed } : {}),
       }),
     onSuccess: (saved) => {
       queryClient.setQueryData(DIRECTOR_QUERY_KEYS.settings(backend.id), saved);
@@ -107,6 +120,33 @@ function SettingsForm({
               {t(I18nKey.ORG_CHART$SETTINGS_DEPTH_NOW, { count: state.depth })}
             </span>
           </label>
+          {allowed && names.length > 0 ? (
+            <fieldset className="flex flex-col gap-2 text-sm">
+              <legend className="mb-2">
+                {t(I18nKey.ORG_CHART$SETTINGS_PROFILES)}
+              </legend>
+              {names.map((name) => (
+                <label key={name} className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={allowed.includes(name)}
+                    disabled={save.isPending}
+                    onChange={(event) =>
+                      setAllowed(
+                        event.target.checked
+                          ? [...allowed, name]
+                          : allowed.filter((other) => other !== name),
+                      )
+                    }
+                  />
+                  {name}
+                </label>
+              ))}
+              <span className="text-xs text-muted">
+                {t(I18nKey.ORG_CHART$SETTINGS_PROFILES_HELP)}
+              </span>
+            </fieldset>
+          ) : null}
           {state.max_concurrent_runs !== null ? (
             <p className="text-xs text-muted">
               {t(I18nKey.ORG_CHART$SETTINGS_RUNS, {
@@ -127,6 +167,7 @@ function SettingsForm({
               onClick={() => {
                 setAgents(String(DEFAULTS.max_agents));
                 setDepth(String(DEFAULTS.max_depth));
+                if (allowed) setAllowed(DEFAULTS.allowed_profiles);
               }}
             >
               {t(I18nKey.ORG_CHART$SETTINGS_RESET)}
@@ -188,7 +229,11 @@ export function OrgSettings() {
       </button>
       {isOpen ? (
         <SettingsForm
-          key={`${settings.data.max_agents}:${settings.data.max_depth}`}
+          key={[
+            settings.data.max_agents,
+            settings.data.max_depth,
+            ...(settings.data.allowed_profiles ?? []),
+          ].join(":")}
           state={settings.data}
           onClose={() => setIsOpen(false)}
         />

@@ -759,7 +759,6 @@ class AgentServerConversationService {
       !parentConversationId &&
       !automationSetup &&
       !inContainer &&
-      agentProfileKind !== "acp" &&
       agentType !== "plan"
         ? await routeToOrg(firstMessage, workingDir, request)
         : null;

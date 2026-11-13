@@ -5,6 +5,7 @@ import { StatusBadge } from "./status-badge";
 import { useReviewLabel } from "./review-summary";
 import {
   ESCALATION_LABEL_KEYS,
+  externalAgentName,
   ISOLATION_LABEL_KEYS,
   ROLE_LABEL_KEYS,
   SPLIT_LABEL_KEYS,
@@ -82,11 +83,20 @@ export function NodeHoverCard({ node }: NodeHoverCardProps) {
         {node.agents.length > 0 ? (
           <Row label={t(I18nKey.ORG_CHART$AGENTS)}>
             {node.agents
-              .map(
-                (agent) =>
-                  `${t(ROLE_LABEL_KEYS[agent.role])} (${agent.status})`,
-              )
+              .map((agent) => {
+                // An external agent is named; an OpenHands one is the rule.
+                const external =
+                  agent.kind === "acp"
+                    ? ` · ${externalAgentName(agent) ?? t(I18nKey.ORG_CHART$EXTERNAL_AGENT)}`
+                    : "";
+                return `${t(ROLE_LABEL_KEYS[agent.role])} (${agent.status}${external})`;
+              })
               .join(", ")}
+          </Row>
+        ) : null}
+        {node.agent_profile ? (
+          <Row label={t(I18nKey.ORG_CHART$AGENT_PROFILE)}>
+            {node.agent_profile}
           </Row>
         ) : null}
       </dl>

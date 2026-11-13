@@ -2980,6 +2980,22 @@ describe("AgentServerConversationService", () => {
         expect(mockHttpPost).not.toHaveBeenCalled();
       });
 
+      it("is offered to the org when it runs an ACP agent too", async () => {
+        mockRouteToOrg.mockResolvedValue({
+          node_id: "root",
+          conversation_id: "ignored",
+          started_org: true,
+        });
+
+        await AgentServerConversationService.createConversation({
+          ...launch,
+          agentProfileKind: "acp",
+        });
+
+        expect(mockRouteToOrg).toHaveBeenCalledTimes(1);
+        expect(mockHttpPost).not.toHaveBeenCalled();
+      });
+
       it("starts an ordinary conversation when no org takes it", async () => {
         const task =
           await AgentServerConversationService.createConversation(launch);
@@ -2994,7 +3010,6 @@ describe("AgentServerConversationService", () => {
         ["continues another conversation", { parentConversationId: "parent" }],
         ["sets up an automation", { automationSetup: true }],
         ["plans", { agentType: "plan" as const }],
-        ["runs an ACP agent", { agentProfileKind: "acp" as const }],
       ])("is not offered to the org when it %s", async (_, options) => {
         await AgentServerConversationService.createConversation({
           ...launch,

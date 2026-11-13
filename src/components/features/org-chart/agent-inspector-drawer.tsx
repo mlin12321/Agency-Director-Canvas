@@ -13,6 +13,7 @@ import { ReviewSummary } from "./review-summary";
 import { SpecAndContracts } from "./spec-and-contracts";
 import {
   ENFORCEMENT_LABEL_KEYS,
+  externalAgentName,
   ROLE_LABEL_KEYS,
 } from "./org-chart-presentation";
 
@@ -26,7 +27,10 @@ const AgentConversation = React.lazy(() =>
 
 interface AgentInspectorDrawerProps {
   node: OrgNode;
-  /** How far the server holds the team to its boundary, once known. */
+  /**
+   * How far the server holds teams to their boundaries, once known. What the
+   * team's own node says comes first.
+   */
   enforcement?: BoundaryEnforcement;
   onClose: () => void;
 }
@@ -45,6 +49,8 @@ export function AgentInspectorDrawer({
     node.agents.find((candidate) => candidate.role === role) ??
     node.agents.at(0) ??
     null;
+
+  const held = node.boundary_enforcement ?? enforcement;
 
   React.useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -78,9 +84,9 @@ export function AgentInspectorDrawer({
       </div>
 
       <div className="flex max-h-2/5 flex-col gap-3 overflow-y-auto border-b border-border p-3">
-        {enforcement ? (
+        {held ? (
           <p className="text-xs text-muted">
-            {t(ENFORCEMENT_LABEL_KEYS[enforcement], {
+            {t(ENFORCEMENT_LABEL_KEYS[held], {
               path: node.boundary.path || t(I18nKey.ORG_CHART$BOUNDARY_ROOT),
             })}
           </p>
@@ -108,6 +114,12 @@ export function AgentInspectorDrawer({
           >
             {t(ROLE_LABEL_KEYS[candidate.role])}
             <span className="text-xs text-muted">{candidate.status}</span>
+            {candidate.kind === "acp" ? (
+              <span className="rounded-sm border border-border px-1 text-[11px] text-text-secondary">
+                {externalAgentName(candidate) ??
+                  t(I18nKey.ORG_CHART$EXTERNAL_AGENT)}
+              </span>
+            ) : null}
           </button>
         ))}
       </div>
