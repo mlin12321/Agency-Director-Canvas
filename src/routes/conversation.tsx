@@ -8,18 +8,12 @@ import { useTranslation } from "react-i18next";
 
 import { useConversationId } from "#/hooks/use-conversation-id";
 import { useConversationPanelRoute } from "#/hooks/use-conversation-panel-route";
-import { useConversationStore } from "#/stores/conversation-store";
-import { useAgentStore } from "#/stores/agent-store";
-import { useConversationStateStore } from "#/stores/conversation-state-store";
 import { useActiveBackendContext } from "#/contexts/active-backend-context";
 import {
   clearLastConversationId,
   setLastConversationId,
 } from "#/api/backend-registry/last-conversation-store";
 import { readBackendSelectionFromUrl } from "#/api/backend-registry/url-selection";
-import { AgentState } from "#/types/agent-state";
-
-import { EventHandler } from "../wrapper/event-handler";
 
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useSharedConversation } from "#/hooks/query/use-shared-conversation";
@@ -28,11 +22,9 @@ import { useTaskPollingController } from "#/hooks/query/use-task-polling";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { useIsAuthed } from "#/hooks/query/use-is-authed";
 import { ConversationMain } from "#/components/features/conversation/conversation-main/conversation-main";
+import { ConversationSurface } from "#/components/features/conversation/conversation-surface";
 import { ConversationMobilePanelPage } from "#/components/features/conversation/conversation-main/conversation-mobile-panel-page";
-import { ConversationOverviewDrawerProvider } from "#/components/features/conversation/conversation-overview-drawer-context";
 
-import { WebSocketProviderWrapper } from "#/contexts/websocket-provider-wrapper";
-import { useErrorMessageStore } from "#/stores/error-message-store";
 import { I18nKey } from "#/i18n/declaration";
 import { useCloudSandboxAutoResume } from "#/hooks/mutation/use-cloud-sandbox-auto-resume";
 
@@ -79,16 +71,6 @@ function AppContent() {
 
   const { data: conversation, isFetched, isSuccess } = useActiveConversation();
   const { data: isAuthed } = useIsAuthed();
-  const { resetConversationState } = useConversationStore();
-  const resetConversationRuntimeState = useConversationStateStore(
-    (state) => state.reset,
-  );
-  const setCurrentAgentState = useAgentStore(
-    (state) => state.setCurrentAgentState,
-  );
-  const removeErrorMessage = useErrorMessageStore(
-    (state) => state.removeErrorMessage,
-  );
 
   const recoverableDraft = usePendingTaskAttachmentsStore((state) =>
     Object.values(state.byTaskId).find(
@@ -100,27 +82,6 @@ function AppContent() {
             payload.orgId === active.orgId)),
     ),
   );
-
-  const resetForConversation = React.useRef<string | null>(null);
-
-  // Per-conversation UI/runtime resets. The event store is cleared separately,
-  // inside ConversationWebSocketProvider, so the clear is ordered *before* the
-  // preloaded-history re-seed (see the note there) — clearing it here would run
-  // too late and wipe the freshly seeded history on a conversation switch.
-  React.useEffect(() => {
-    if (resetForConversation.current === conversationId) return;
-    resetForConversation.current = conversationId;
-    resetConversationState();
-    resetConversationRuntimeState();
-    setCurrentAgentState(AgentState.LOADING);
-    removeErrorMessage();
-  }, [
-    conversationId,
-    resetConversationState,
-    resetConversationRuntimeState,
-    setCurrentAgentState,
-    removeErrorMessage,
-  ]);
 
   React.useEffect(() => {
     if (recoverableDraft && !backendChanged) {
@@ -234,28 +195,18 @@ function AppContent() {
     return null;
   }
 
-  const content = (
-    <EventHandler>
-      <ConversationOverviewDrawerProvider>
-        <div data-testid="app-route" className="flex h-full flex-col">
-          {showsMobilePanelPage ? (
-            <ConversationMobilePanelPage
-              onNavigateBack={() =>
-                navigate(`/conversations/${conversationId}`)
-              }
-            />
-          ) : (
-            <ConversationMain />
-          )}
-        </div>
-      </ConversationOverviewDrawerProvider>
-    </EventHandler>
-  );
-
   return (
-    <WebSocketProviderWrapper conversationId={conversationId}>
-      {content}
-    </WebSocketProviderWrapper>
+    <ConversationSurface conversationId={conversationId}>
+      <div data-testid="app-route" className="flex h-full flex-col">
+        {showsMobilePanelPage ? (
+          <ConversationMobilePanelPage
+            onNavigateBack={() => navigate(`/conversations/${conversationId}`)}
+          />
+        ) : (
+          <ConversationMain />
+        )}
+      </div>
+    </ConversationSurface>
   );
 }
 
