@@ -2,42 +2,18 @@ import React from "react";
 import { X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { AgentRole, OrgNode } from "#/api/director/types";
-import {
-  NavigationProvider,
-  useNavigation,
-} from "#/context/navigation-context";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
 import { BoundaryMemory } from "./boundary-memory";
 import { ROLE_LABEL_KEYS } from "./org-chart-presentation";
 
-// The conversation view pulls in the chat, terminal and diff stack, so it
-// only loads once an agent with a live conversation is inspected.
-const ConversationView = React.lazy(() =>
-  import("#/routes/conversation").then((module) => ({
-    default: module.ConversationView,
+// The conversation UI pulls in the chat, terminal and diff stack, so it only
+// loads once an agent with a live conversation is inspected.
+const AgentConversation = React.lazy(() =>
+  import("./agent-conversation").then((module) => ({
+    default: module.AgentConversation,
   })),
 );
-
-/**
- * Mounts the stock conversation view for one agent by re-targeting the
- * navigation context. Conversation state is a single global "active"
- * conversation, so exactly one of these may be mounted at a time.
- */
-function InspectedConversation({ conversationId }: { conversationId: string }) {
-  const navigation = useNavigation();
-  const value = React.useMemo(
-    () => ({ ...navigation, conversationId }),
-    [navigation, conversationId],
-  );
-  return (
-    <NavigationProvider value={value}>
-      <React.Suspense fallback={null}>
-        <ConversationView />
-      </React.Suspense>
-    </NavigationProvider>
-  );
-}
 
 interface AgentInspectorDrawerProps {
   node: OrgNode;
@@ -117,10 +93,12 @@ export function AgentInspectorDrawer({
 
       <div className="min-h-0 flex-1">
         {agent?.conversation_id ? (
-          <InspectedConversation
-            key={agent.conversation_id}
-            conversationId={agent.conversation_id}
-          />
+          <React.Suspense fallback={null}>
+            <AgentConversation
+              key={agent.conversation_id}
+              conversationId={agent.conversation_id}
+            />
+          </React.Suspense>
         ) : (
           <p className="p-6 text-center text-sm text-muted">
             {t(I18nKey.ORG_CHART$NO_CONVERSATION)}

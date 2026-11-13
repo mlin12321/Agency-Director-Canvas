@@ -9,13 +9,14 @@ import {
   type OpenEscalation,
   type OrgEvent,
   type OrgNode,
+  type OrgSummary,
 } from "#/api/director/types";
 
 /**
  * MSW handlers for the Agent Server director API, so `npm run dev:mock` renders the
  * org chart without one running. The tree is small and static: one root, a
  * few domains, a few modules under each, and two open escalations: one still
- * held by the team above, one that has reached the human.
+ * held by the team above, one that has reached the human and can be answered.
  */
 const NODE_QUERY_PARAM = "node";
 const FULL_QUERY_PARAM = "full";
@@ -122,6 +123,7 @@ function buildMockTree() {
         status: module.status,
         spec_summary: `Implements ${module.name} for ${domain.name}.`,
         escalations: ESCALATIONS[id] ?? [],
+        pending_split: null,
         descendant_counts: zeroCounts(),
         escalation_count: waitingOnHuman(id),
       });
@@ -144,6 +146,7 @@ function buildMockTree() {
       status: domain.status,
       spec_summary: `Interface contracts between the ${domain.name} services.`,
       escalations: own,
+      pending_split: null,
       descendant_counts: { ...moduleCounts },
       escalation_count: waitingOnHuman(domain.name) + below,
     });
@@ -161,6 +164,7 @@ function buildMockTree() {
     status: "working",
     spec_summary: "Owns cross-domain contracts and the release plan.",
     escalations: [],
+    pending_split: null,
     descendant_counts: rootCounts,
     escalation_count: Object.keys(ESCALATIONS).reduce(
       (sum, id) => sum + waitingOnHuman(id),
@@ -170,7 +174,7 @@ function buildMockTree() {
   return nodes;
 }
 
-const tree = buildMockTree();
+let tree = buildMockTree();
 
 function ancestorsOf(node: OrgNode): OrgNode[] {
   const ancestors: OrgNode[] = [];
@@ -235,8 +239,44 @@ function snapshot(focusId: NodeId, full: boolean): OrgEvent | null {
 
 let taughtRules = new Map<NodeId, string[]>();
 
+/** The open streams, which hear about an answered escalation. */
+const subscribers = new Set<(event: OrgEvent) => void>();
+
 export function resetDirectorMockData() {
   taughtRules = new Map();
+  tree = buildMockTree();
+}
+
+function frame(event: OrgEvent) {
+  return new TextEncoder().encode(
+    `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+  );
+}
+
+/** Settle an escalation that waits on the human, as an answer does. */
+function settle(node: OrgNode, escalationId: string): OrgNode {
+  const settled: OrgNode = {
+    ...node,
+    escalations: node.escalations.filter(({ id }) => id !== escalationId),
+    escalation_count: node.escalation_count - 1,
+  };
+  tree.set(node.id, settled);
+  const changed = [settled];
+  ancestorsOf(node).forEach((ancestor) => {
+    const updated = {
+      ...ancestor,
+      escalation_count: ancestor.escalation_count - 1,
+    };
+    tree.set(ancestor.id, updated);
+    changed.push(updated);
+  });
+  subscribers.forEach((tell) => {
+    changed.forEach((changedNode) =>
+      tell({ type: "node_upsert", node: changedNode }),
+    );
+    tell({ type: "escalations", escalations: escalationsWaiting() });
+  });
+  return settled;
 }
 
 function notFound(id: string) {
@@ -244,20 +284,67 @@ function notFound(id: string) {
 }
 
 export const DIRECTOR_HANDLERS = [
+  http.get(`${BASE}/org`, () => {
+    const body: OrgSummary = {
+      root_id: ROOT_ID,
+      node_count: tree.size,
+      repo_path: "/workspace/project",
+      is_git_repository: true,
+      fixture: true,
+    };
+    return HttpResponse.json(body);
+  }),
+
+  http.post(`${BASE}/org`, () =>
+    HttpResponse.json(
+      { detail: "The director already has an org" },
+      { status: 409 },
+    ),
+  ),
+
+  http.post(
+    `${BASE}/org/nodes/:nodeId/escalations/:escalationId/answer`,
+    async ({ params, request }) => {
+      const nodeId = String(params.nodeId);
+      const escalationId = String(params.escalationId);
+      const node = tree.get(nodeId);
+      if (!node) return notFound(nodeId);
+      const payload = (await request.json()) as { answer?: unknown } | null;
+      if (typeof payload?.answer !== "string" || !payload.answer.trim()) {
+        return HttpResponse.json(
+          { detail: "`answer` must be a non-empty string" },
+          { status: 422 },
+        );
+      }
+      const waiting = node.escalations.some(
+        ({ id, held_by: heldBy }) => id === escalationId && heldBy === null,
+      );
+      if (!waiting) {
+        return HttpResponse.json(
+          { detail: "That escalation does not wait on the human" },
+          { status: 409 },
+        );
+      }
+      return HttpResponse.json(settle(node, escalationId));
+    },
+  ),
+
   http.get(`${BASE}/org/tree-stream`, ({ request }) => {
     const params = new URL(request.url).searchParams;
     const focusId = params.get(NODE_QUERY_PARAM) ?? ROOT_ID;
     const event = snapshot(focusId, params.get(FULL_QUERY_PARAM) === "true");
     if (!event) return notFound(focusId);
 
-    // One snapshot, then the stream stays open like the real one does.
+    // A snapshot, then the stream stays open like the real one does.
+    let tell: ((event: OrgEvent) => void) | null = null;
     const stream = new ReadableStream<Uint8Array>({
       start(controller) {
-        controller.enqueue(
-          new TextEncoder().encode(
-            `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
-          ),
-        );
+        controller.enqueue(frame(event));
+        tell = (next) => controller.enqueue(frame(next));
+        subscribers.add(tell);
+      },
+      cancel() {
+        if (tell) subscribers.delete(tell);
       },
     });
     return new HttpResponse(stream, {

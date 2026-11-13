@@ -6,6 +6,7 @@ import {
   ESCALATION_LABEL_KEYS,
   ISOLATION_LABEL_KEYS,
   ROLE_LABEL_KEYS,
+  SPLIT_LABEL_KEYS,
 } from "./org-chart-presentation";
 
 function Row({
@@ -77,6 +78,17 @@ export function NodeHoverCard({ node, titleOf }: NodeHoverCardProps) {
           </Row>
         ) : null}
       </dl>
+      {node.pending_split ? (
+        // A split the team's Manager has not approved, or is carrying out.
+        <div className="flex flex-col gap-0.5 border-t border-border pt-2">
+          <span className="text-contrast">
+            {t(SPLIT_LABEL_KEYS[node.pending_split.status])}
+          </span>
+          <span className="text-muted">
+            {node.pending_split.children.map((child) => child.title).join(", ")}
+          </span>
+        </div>
+      ) : null}
       {node.escalations.length > 0 ? (
         // What this team sent up, and which team above is dealing with it.
         <ul className="flex flex-col gap-1 border-t border-border pt-2">

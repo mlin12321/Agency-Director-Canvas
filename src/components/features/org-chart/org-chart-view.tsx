@@ -1,8 +1,12 @@
 import React from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
+import { DirectorClient } from "#/api/director/director-client";
 import type { NodeId, OrgNode } from "#/api/director/types";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import { ORG_CHART_PATH } from "#/constants/org-chart";
+import { useActiveBackend } from "#/contexts/active-backend-context";
+import { DIRECTOR_QUERY_KEYS } from "#/hooks/query/query-keys";
 import { useOrgTree } from "#/hooks/use-org-tree";
 import { I18nKey } from "#/i18n/declaration";
 import { useOrgChartStore } from "#/stores/org-chart-store";
@@ -13,6 +17,7 @@ import { EscalationsPanel } from "./escalations-panel";
 import { FocusedChart, fitFocusedChart } from "./focused-chart";
 import { OrgBreadcrumb } from "./org-breadcrumb";
 import { OrgTree } from "./org-tree";
+import { StartOrgForm } from "./start-org-form";
 
 interface OrgChartViewProps {
   /** The team the page is on; `null` is the root of the tree. */
@@ -61,10 +66,20 @@ export function OrgChartView({ nodeId }: OrgChartViewProps) {
   const zoom = useOrgChartStore((state) => state.zoom);
   const full = view === "full";
   // The whole org is one subscription whichever team the page is on.
-  const { status, focusId, nodes, escalations } = useOrgTree(
+  const { status, focusId, nodes, escalations, reconnect } = useOrgTree(
     full ? null : nodeId,
     full,
   );
+  // A director without a tree answers the stream like a server without a
+  // director; only asking tells "start an org" from "nothing to talk to".
+  const { backend } = useActiveBackend();
+  const org = useQuery({
+    queryKey: DIRECTOR_QUERY_KEYS.org(backend.id),
+    queryFn: () => DirectorClient.getOrg(),
+    enabled: status === "unavailable",
+    retry: false,
+    meta: { disableToast: true },
+  });
   // Details belong to the team they were opened on.
   const [detailsId, setDetailsId] = React.useState<NodeId | null>(null);
   const closeDetails = React.useCallback(() => setDetailsId(null), []);
@@ -109,6 +124,13 @@ export function OrgChartView({ nodeId }: OrgChartViewProps) {
   }
 
   if (!top || !current) {
+    if (status === "unavailable" && org.data?.root_id === null) {
+      return (
+        <Notice title={t(I18nKey.ORG_CHART$START_TITLE)}>
+          <StartOrgForm org={org.data} onStarted={reconnect} />
+        </Notice>
+      );
+    }
     return status === "unavailable" ? (
       <Notice title={t(I18nKey.ORG_CHART$UNAVAILABLE_TITLE)}>
         <p className="max-w-md text-sm text-muted">
