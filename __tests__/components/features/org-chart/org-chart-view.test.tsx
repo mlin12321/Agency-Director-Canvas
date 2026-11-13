@@ -11,6 +11,7 @@ import type {
   NodeStatus,
   OrgEvent,
   OrgSummary,
+  OrgSync,
   Review,
   SplitProposal,
 } from "#/api/director/types";
@@ -1838,23 +1839,44 @@ describe("OrgChartView", () => {
       );
     }
 
+    const SYNCED: OrgSync = {
+      remote: "origin",
+      result: "up_to_date",
+      merge: null,
+      blackboard: null,
+      branches: [],
+      put_aside: [],
+    };
+
     function sharing() {
-      return screen.findByRole("group", { name: "ORG_CHART$SHARED_MEMORY" });
+      return screen.findByRole("group", { name: "ORG_CHART$SYNC_LABEL" });
     }
 
     it("pulls from origin and says what came of it", async () => {
       liveOrg();
       const asked: unknown[] = [];
       server.use(
-        http.post("*/api/director/org/blackboard/pull", async ({ request }) => {
+        http.post("*/api/director/org/pull", async ({ request }) => {
           asked.push(await request.json());
           return HttpResponse.json({
-            remote: "origin",
-            head: "abc",
-            changed: true,
-            kept_local: ["services/auth/spec.md"],
-            pushed: false,
-          });
+            ...SYNCED,
+            result: "merged",
+            blackboard: {
+              remote: "origin",
+              head: "abc",
+              changed: true,
+              kept_local: ["services/auth/spec.md"],
+              pushed: false,
+            },
+            branches: [
+              {
+                node_id: "apps.web",
+                title: "Web",
+                branch: "web",
+                result: "diverged",
+              },
+            ],
+          } satisfies OrgSync);
         }),
       );
       const user = userEvent.setup();
@@ -1868,33 +1890,20 @@ describe("OrgChartView", () => {
 
       const outcome = await screen.findByText(/ORG_CHART\$BLACKBOARD_PULLED/);
       expect(outcome).toHaveTextContent("ORG_CHART$BLACKBOARD_KEPT_LOCAL");
+      expect(outcome).toHaveTextContent("ORG_CHART$SYNC_DIVERGED");
       expect(asked).toEqual([{ remote: "origin" }]);
     });
 
     it("pushes to origin, and says when there was nothing new or it failed", async () => {
       liveOrg();
-      let fail = false;
+      let fail = 0;
       server.use(
-        http.post("*/api/director/org/blackboard/push", () =>
+        http.post("*/api/director/org/push", () =>
           fail
-            ? HttpResponse.json({ detail: "unreachable" }, { status: 502 })
-            : HttpResponse.json({
-                remote: "origin",
-                head: "abc",
-                changed: false,
-                kept_local: [],
-                pushed: true,
-              }),
+            ? HttpResponse.json({ detail: fail }, { status: fail })
+            : HttpResponse.json({ ...SYNCED, result: "pushed" }),
         ),
-        http.post("*/api/director/org/blackboard/pull", () =>
-          HttpResponse.json({
-            remote: "origin",
-            head: "abc",
-            changed: false,
-            kept_local: [],
-            pushed: false,
-          }),
-        ),
+        http.post("*/api/director/org/pull", () => HttpResponse.json(SYNCED)),
       );
       const user = userEvent.setup();
       renderWithProviders(<OrgChartView nodeId="root" />);
@@ -1917,12 +1926,20 @@ describe("OrgChartView", () => {
         await screen.findByText("ORG_CHART$BLACKBOARD_UP_TO_DATE"),
       ).toBeInTheDocument();
 
-      fail = true;
+      fail = 502;
       await user.click(push);
       expect(
         await screen.findByText("ORG_CHART$BLACKBOARD_ERROR"),
       ).toHaveAttribute("role", "alert");
       expect(screen.queryByText("ORG_CHART$BLACKBOARD_UP_TO_DATE")).toBeNull();
+
+      // The remote has what is not here, or a merge waits.
+      fail = 409;
+      await user.click(push);
+      expect(await screen.findByText("ORG_CHART$SYNC_REFUSED")).toHaveAttribute(
+        "role",
+        "alert",
+      );
     });
 
     it("is not offered for the sample org", async () => {
@@ -1931,7 +1948,7 @@ describe("OrgChartView", () => {
       await screen.findByText(/ORG_CHART\$TALK_HINT/);
 
       expect(
-        screen.queryByRole("group", { name: "ORG_CHART$SHARED_MEMORY" }),
+        screen.queryByRole("group", { name: "ORG_CHART$SYNC_LABEL" }),
       ).toBeNull();
     });
   });
