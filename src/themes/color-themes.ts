@@ -17,6 +17,7 @@ export {
   AVAILABLE_COLOR_THEMES,
   COLOR_THEMES,
   DEFAULT_COLOR_THEME,
+  UNAPPLIED_COLOR_THEME,
 } from "./color-theme/definitions";
 
 export {

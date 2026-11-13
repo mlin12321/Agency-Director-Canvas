@@ -54,7 +54,7 @@ const CONTROL_PAGE_SURFACES = [
   "--oh-interactive-selected",
 ];
 
-describe.each(["light-plus", "solarized-light", "paper"] as const)(
+describe.each(["light-plus", "solarized-light", "paper", "director"] as const)(
   "%s text contrast contract",
   (theme) => {
     it.each(BODY_TEXT)("%s meets WCAG AA on every panel surface", (text) => {

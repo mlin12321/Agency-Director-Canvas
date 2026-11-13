@@ -17,7 +17,7 @@ type BranchProps = Omit<OrgTreeProps, "root"> & {
   isTop: boolean;
 };
 
-const LINE = "bg-border";
+const LINE = "bg-line-accent";
 
 /**
  * From this many reports up, a team whose reports all have no sub-teams
@@ -51,7 +51,7 @@ function Branch({ node, isTop, ...tree }: BranchProps) {
         className={cn(
           "relative flex flex-col gap-1.5 pl-3 pt-1.5",
           // From under the team's card across to the rail on the left.
-          "after:absolute after:left-0 after:top-0 after:h-px after:w-1/2 after:bg-border",
+          "after:absolute after:left-0 after:top-0 after:h-px after:w-1/2 after:bg-line-accent",
         )}
       >
         {reports.map((report) => (
@@ -61,7 +61,7 @@ function Branch({ node, isTop, ...tree }: BranchProps) {
               "relative",
               // The rail, drawn one report at a time so that it ends level
               // with the last one.
-              "after:absolute after:-left-3 after:-top-1.5 after:bottom-0 after:w-px after:bg-border last:after:bottom-1/2",
+              "after:absolute after:-left-3 after:-top-1.5 after:bottom-0 after:w-px after:bg-line-accent last:after:bottom-1/2",
             )}
           >
             <span
@@ -93,8 +93,8 @@ function Branch({ node, isTop, ...tree }: BranchProps) {
           ? null
           : [
               "px-1.5 pt-4",
-              "before:absolute before:left-0 before:top-0 before:h-px before:w-1/2 before:bg-border first:before:hidden",
-              "after:absolute after:right-0 after:top-0 after:h-px after:w-1/2 after:bg-border last:after:hidden",
+              "before:absolute before:left-0 before:top-0 before:h-px before:w-1/2 before:bg-line-accent first:before:hidden",
+              "after:absolute after:right-0 after:top-0 after:h-px after:w-1/2 after:bg-line-accent last:after:hidden",
             ],
       )}
     >

@@ -121,6 +121,7 @@
 
   /* Semantic border aliases */
   --color-border: var(--oh-border);
+  --color-line-accent: var(--oh-line-accent);
   --color-scroll-fade: var(--oh-scroll-fade-from, var(--oh-color-base));
   --color-border-input: var(--oh-border-input);
   /* Existing dark border for informational Git chips and Workspace mode. */
@@ -259,6 +260,7 @@
   --oh-border-width: 1px;
   --oh-field-border-width: 1px;
   --oh-border: var(--cool-grey-700);
+  --oh-line-accent: var(--oh-border); /* lines that join things, e.g. org teams */
   --oh-border-input: var(
     --cool-grey-700
   ); /* unified with --oh-border; same stroke weight everywhere */

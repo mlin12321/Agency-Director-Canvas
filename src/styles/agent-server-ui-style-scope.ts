@@ -79,6 +79,7 @@ export const AGENT_SERVER_UI_DEFAULT_CSS_VARIABLES = {
   "--oh-border-width": "1px",
   "--oh-field-border-width": "1px",
   "--oh-border": "var(--cool-grey-700)",
+  "--oh-line-accent": "var(--oh-border)",
   "--oh-border-input": "var(--cool-grey-600)",
   "--oh-border-subtle": "var(--cool-grey-800)",
   "--oh-separator": "rgba(113, 120, 136, 0.5)",

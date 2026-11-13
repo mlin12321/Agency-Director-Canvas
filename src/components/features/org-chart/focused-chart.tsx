@@ -18,7 +18,7 @@ interface FocusedChartProps {
   onOpenDetails: () => void;
 }
 
-const LINE = "w-px bg-border";
+const LINE = "w-px bg-line-accent";
 
 // Sizes in px of what `FocusedChart` draws, for working out what fits.
 // They mirror its classes: w-40 h-18 cards, gap-4, h-4 lines, size-4 icons,
@@ -153,7 +153,7 @@ export function FocusedChart({
           <span aria-hidden="true" className={`h-4 ${LINE}`} />
           <ul
             style={{ "--org-chart-columns": columns } as React.CSSProperties}
-            className="org-chart-reports flex flex-wrap justify-center gap-4 border-t border-border pt-3"
+            className="org-chart-reports flex flex-wrap justify-center gap-4 border-t border-line-accent pt-3"
           >
             {reports.map((report) => (
               <li key={report.id} className="flex flex-col items-center">

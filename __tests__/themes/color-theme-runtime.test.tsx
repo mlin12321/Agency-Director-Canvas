@@ -25,6 +25,7 @@ describe("color themes", () => {
         { key: "light-plus", label: "Light+" },
         { key: "solarized-light", label: "Solarized Light" },
         { key: "paper", label: "Paper" },
+        { key: "director", label: "Director" },
       ]),
     );
   });
@@ -89,9 +90,11 @@ describe("color themes", () => {
     "light-plus",
     "solarized-light",
     "paper",
+    "director",
     "openhands-neutral",
   ] as const)("bootstraps %s before React mounts", (key) => {
     // Reproduce the prerendered dark wrapper while app initialization waits.
+    applyColorTheme("openhands-neutral");
     render(<AgentServerUIRoot data-testid="shell">Canvas</AgentServerUIRoot>);
     const wrapper = screen.getByTestId("shell").firstElementChild!;
     expect(wrapper).toHaveAttribute("data-theme", "dark");

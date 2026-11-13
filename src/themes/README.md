@@ -4,6 +4,21 @@ Canvas has three rendering systems: scoped CSS/HeroUI for the interface, Prism
 and Monaco for code, and xterm for terminal output. A palette must cover all of
 them; changing the page background alone is not a complete theme.
 
+## Director
+
+Director (`director`) is the default palette: white, then black, then one
+bright red, in that order of prominence. The page and every panel are white
+(the terminal's too, as xterm paints no background of its own); light gray
+marks an area within a panel; text is black and primary actions print in
+reverse. Red is for lines and detail: the lines that join teams in the org
+chart (`--oh-line-accent`, which every other palette leaves on its border
+colour), the focus ring and error dots. Red that is read as text (links,
+danger) is one step deeper so it stays legible on the gray areas. Success and
+warning keep the Light+ inks. Code, diffs and terminal output reuse the Light+
+palettes unchanged. A reader who already chose a palette keeps it, and an
+embedded root that applies none stays on the stylesheet's dark defaults
+(`UNAPPLIED_COLOR_THEME`).
+
 ## Paper
 
 Paper (`paper`) is an optional light palette printed like an old newspaper:
@@ -14,7 +29,7 @@ inks that stay readable as text; there is no blue in the interface. Code,
 diffs and terminal output follow the same inks: reserved words in bold ink,
 comments faded, literals in the spot and status inks. Select it in Settings →
 Application → Color Theme. It uses the existing `setColorTheme` and browser
-preference; OpenHands-Neutral remains the default. Paper stays light
+preference. Paper stays light
 regardless of the operating system's appearance.
 
 Newsreader is used only for `h1`, `h2`, and `.heading`. Dense controls, message

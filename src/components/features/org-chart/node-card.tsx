@@ -108,17 +108,17 @@ export const NodeCard = React.memo(function NodeCard({
         ) : null}
       </span>
       {waiting ? (
-        <span className="w-full truncate text-[11px] text-text-secondary">
+        <span className="w-full truncate text-[11px] text-contrast">
           {t(I18nKey.ORG_CHART$WAITING_TO_START)}
         </span>
       ) : null}
       {node.headline && !waiting ? (
-        <span className="w-full truncate text-[11px] text-text-secondary">
+        <span className="w-full truncate text-[11px] text-contrast">
           {node.headline}
         </span>
       ) : null}
       {node.child_ids.length > 0 ? (
-        <span className="text-[11px] text-muted">
+        <span className="text-[11px] text-contrast">
           {t(I18nKey.ORG_CHART$SUB_TEAMS, { count: node.child_ids.length })}
         </span>
       ) : null}

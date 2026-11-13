@@ -17,7 +17,7 @@ export function StatusBadge({ status, count }: StatusBadgeProps) {
   return (
     <span
       data-status={status}
-      className="inline-flex items-center gap-1.5 text-xs text-text-secondary"
+      className="inline-flex items-center gap-1.5 text-xs text-contrast"
     >
       <span
         aria-hidden="true"

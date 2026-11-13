@@ -6,7 +6,8 @@ export type ColorThemeKey =
   | "openhands-neo"
   | "light-plus"
   | "solarized-light"
-  | "paper";
+  | "paper"
+  | "director";
 
 export type ColorThemeAppearance = "dark" | "light";
 
