@@ -1,7 +1,7 @@
 import React from "react";
 import { Ellipsis } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import type { NodeId, OrgNode } from "#/api/director/types";
+import type { OrgNode } from "#/api/director/types";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import { orgNodePath } from "#/constants/org-chart";
 import { I18nKey } from "#/i18n/declaration";
@@ -13,16 +13,15 @@ interface FocusedChartProps {
   reports: OrgNode[];
   /** Reports to a row, from `fitFocusedChart`. */
   columns: number;
-  titleOf: (id: NodeId) => string;
   onOpenDetails: () => void;
 }
 
 const LINE = "w-px bg-border";
 
 // Sizes in px of what `FocusedChart` draws, for working out what fits.
-// They mirror its classes: w-40 h-14 cards, gap-4, h-4 lines, size-4 icons.
+// They mirror its classes: w-40 h-18 cards, gap-4, h-4 lines, size-4 icons.
 const CARD_WIDTH = 160;
-const CARD_HEIGHT = 56;
+const CARD_HEIGHT = 72;
 const GAP = 16;
 const UP_MARKER = 32;
 const TEAM_TO_REPORTS = 29;
@@ -114,7 +113,6 @@ export function FocusedChart({
   parent,
   reports,
   columns,
-  titleOf,
   onOpenDetails,
 }: FocusedChartProps) {
   const { t } = useTranslation("openhands");
@@ -137,12 +135,7 @@ export function FocusedChart({
           />
         </NavigationLink>
       ) : null}
-      <NodeCard
-        node={current}
-        current
-        titleOf={titleOf}
-        onOpenDetails={onOpenDetails}
-      />
+      <NodeCard node={current} current onOpenDetails={onOpenDetails} />
       {reports.length > 0 ? (
         <>
           <span aria-hidden="true" className={`h-4 ${LINE}`} />
@@ -155,7 +148,6 @@ export function FocusedChart({
                 <NodeCard
                   node={report}
                   current={false}
-                  titleOf={titleOf}
                   onOpenDetails={onOpenDetails}
                 />
                 {report.child_ids.length > 0 ? (

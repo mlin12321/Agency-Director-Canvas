@@ -101,6 +101,11 @@ export interface OrgNode {
   branch: string;
   agents: AgentRef[];
   status: NodeStatus;
+  /**
+   * One line on what the team is delivering, written by a model from the
+   * team's task and its latest report. Empty on a server that writes none.
+   */
+  headline?: string;
   spec_summary: string;
   /** Open escalations this node raised, wherever above they are held. */
   escalations: Escalation[];
@@ -126,17 +131,38 @@ export interface OrgSummary {
   is_git_repository: boolean;
   /** The tree is a fixed sample; its agents are not running. */
   fixture: boolean;
+  /** Absent on a server that does not hold teams to their boundaries. */
+  boundary_enforcement?: BoundaryEnforcement;
 }
 
-/** Start an org: a root team that works on `task`. */
-export interface CreateOrgRequest {
-  title: string;
-  task: string;
+/**
+ * How far a team is held to its boundary. `sandbox`: the shell of an agent
+ * can write only the directory its team owns, and its file tools are refused
+ * anything else. `checks`: only the file tools are refused.
+ */
+export type BoundaryEnforcement = "sandbox" | "checks";
+
+/** Something the human says to the org, from somewhere in the repository. */
+export interface RouteMessageRequest {
+  text: string;
+  /** The directory the message is about, repo-relative. Default: the root. */
+  path?: string;
   /**
-   * How to start the root team's IC, as for a normal conversation. Every
-   * other agent of the org is derived from it.
+   * How to start the root team's IC when there is no org yet, as for a
+   * normal conversation; the message then becomes the org's task and every
+   * other agent is derived from this one.
    */
-  conversation: Record<string, unknown>;
+  conversation?: Record<string, unknown>;
+}
+
+/** Where a message to the org went. */
+export interface RoutedMessage {
+  /** The team that received it. */
+  node_id: NodeId;
+  /** The conversation of that team's IC. */
+  conversation_id: string;
+  /** There was no org, and the message started one. */
+  started_org: boolean;
 }
 
 /** An escalation that waits on the human, with the nodes it came up through. */

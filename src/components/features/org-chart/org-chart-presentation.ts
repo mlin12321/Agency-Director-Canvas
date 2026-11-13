@@ -1,5 +1,6 @@
 import type {
   AgentRole,
+  BoundaryEnforcement,
   EscalationKind,
   IsolationMode,
   NodeStatus,
@@ -34,6 +35,11 @@ export const ISOLATION_LABEL_KEYS: Record<IsolationMode, I18nKey> = {
 export const ESCALATION_LABEL_KEYS: Record<EscalationKind, I18nKey> = {
   critical_issue: I18nKey.ORG_CHART$ESCALATION_CRITICAL,
   design_decision: I18nKey.ORG_CHART$ESCALATION_DECISION,
+};
+
+export const ENFORCEMENT_LABEL_KEYS: Record<BoundaryEnforcement, I18nKey> = {
+  sandbox: I18nKey.ORG_CHART$ENFORCED_SANDBOX,
+  checks: I18nKey.ORG_CHART$ENFORCED_CHECKS,
 };
 
 export const SPLIT_LABEL_KEYS: Record<SplitStatus, I18nKey> = {

@@ -10,6 +10,8 @@ import {
   type OrgEvent,
   type OrgNode,
   type OrgSummary,
+  type RoutedMessage,
+  type RouteMessageRequest,
 } from "#/api/director/types";
 
 /**
@@ -121,6 +123,7 @@ function buildMockTree() {
         branch: `agents/${domain.name}`,
         agents: POD,
         status: module.status,
+        headline: `Building ${module.name} for ${domain.name}.`,
         spec_summary: `Implements ${module.name} for ${domain.name}.`,
         escalations: ESCALATIONS[id] ?? [],
         pending_split: null,
@@ -144,6 +147,7 @@ function buildMockTree() {
       branch: `agents/${domain.name}`,
       agents: POD,
       status: domain.status,
+      headline: `Keeps the ${domain.name} services working together.`,
       spec_summary: `Interface contracts between the ${domain.name} services.`,
       escalations: own,
       pending_split: null,
@@ -162,6 +166,7 @@ function buildMockTree() {
     branch: "main",
     agents: POD,
     status: "working",
+    headline: "Plans the release across every domain.",
     spec_summary: "Owns cross-domain contracts and the release plan.",
     escalations: [],
     pending_split: null,
@@ -247,6 +252,15 @@ export function resetDirectorMockData() {
   tree = buildMockTree();
 }
 
+/** The team that owns the nearest folder at or above `path`. */
+function nearestTeam(path: string): OrgNode {
+  const teams = [...tree.values()];
+  for (let folder = path; ; folder = folder.replace(/\/?[^/]*$/, "")) {
+    const team = teams.find((node) => node.boundary.path === folder);
+    if (team) return team;
+  }
+}
+
 function frame(event: OrgEvent) {
   return new TextEncoder().encode(
     `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
@@ -291,16 +305,27 @@ export const DIRECTOR_HANDLERS = [
       repo_path: "/workspace/project",
       is_git_repository: true,
       fixture: true,
+      boundary_enforcement: "sandbox",
     };
     return HttpResponse.json(body);
   }),
 
-  http.post(`${BASE}/org`, () =>
-    HttpResponse.json(
-      { detail: "The director already has an org" },
-      { status: 409 },
-    ),
-  ),
+  http.post(`${BASE}/org/messages`, async ({ request }) => {
+    const payload = (await request.json()) as RouteMessageRequest | null;
+    if (typeof payload?.text !== "string" || !payload.text.trim()) {
+      return HttpResponse.json(
+        { detail: "`text` must be a non-empty string" },
+        { status: 422 },
+      );
+    }
+    const body: RoutedMessage = {
+      node_id: nearestTeam(payload.path ?? "").id,
+      // The mock org's agents have no conversations.
+      conversation_id: "",
+      started_org: false,
+    };
+    return HttpResponse.json(body);
+  }),
 
   http.post(
     `${BASE}/org/nodes/:nodeId/escalations/:escalationId/answer`,

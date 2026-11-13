@@ -1,11 +1,18 @@
 import React from "react";
 import { X } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import type { AgentRole, OrgNode } from "#/api/director/types";
+import type {
+  AgentRole,
+  BoundaryEnforcement,
+  OrgNode,
+} from "#/api/director/types";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
 import { BoundaryMemory } from "./boundary-memory";
-import { ROLE_LABEL_KEYS } from "./org-chart-presentation";
+import {
+  ENFORCEMENT_LABEL_KEYS,
+  ROLE_LABEL_KEYS,
+} from "./org-chart-presentation";
 
 // The conversation UI pulls in the chat, terminal and diff stack, so it only
 // loads once an agent with a live conversation is inspected.
@@ -17,12 +24,15 @@ const AgentConversation = React.lazy(() =>
 
 interface AgentInspectorDrawerProps {
   node: OrgNode;
+  /** How far the server holds the team to its boundary, once known. */
+  enforcement?: BoundaryEnforcement;
   onClose: () => void;
 }
 
 /** One team's details: its boundary memory and its agents' conversations. */
 export function AgentInspectorDrawer({
   node,
+  enforcement,
   onClose,
 }: AgentInspectorDrawerProps) {
   const { t } = useTranslation("openhands");
@@ -65,7 +75,14 @@ export function AgentInspectorDrawer({
         </button>
       </div>
 
-      <div className="border-b border-border p-3">
+      <div className="flex flex-col gap-3 border-b border-border p-3">
+        {enforcement ? (
+          <p className="text-xs text-muted">
+            {t(ENFORCEMENT_LABEL_KEYS[enforcement], {
+              path: node.boundary.path || t(I18nKey.ORG_CHART$BOUNDARY_ROOT),
+            })}
+          </p>
+        ) : null}
         <BoundaryMemory node={node} />
       </div>
 

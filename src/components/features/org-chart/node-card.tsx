@@ -1,7 +1,7 @@
 import React from "react";
 import { TriangleAlert } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import type { NodeId, OrgNode } from "#/api/director/types";
+import type { OrgNode } from "#/api/director/types";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import { Tooltip } from "#/components/shared/tooltip";
 import { orgNodePath } from "#/constants/org-chart";
@@ -14,7 +14,6 @@ interface NodeCardProps {
   node: OrgNode;
   /** The team the page is on. Its card opens its details. */
   current: boolean;
-  titleOf: (id: NodeId) => string;
   onOpenDetails: () => void;
   /** Bring the current team to the middle of a chart that scrolls. */
   centerInScroller?: boolean;
@@ -32,7 +31,6 @@ const MAIN_CLASS =
 export function NodeCard({
   node,
   current,
-  titleOf,
   onOpenDetails,
   centerInScroller = false,
 }: NodeCardProps) {
@@ -79,6 +77,11 @@ export function NodeCard({
           </span>
         ) : null}
       </span>
+      {node.headline ? (
+        <span className="w-full truncate text-xs text-text-secondary">
+          {node.headline}
+        </span>
+      ) : null}
       {node.child_ids.length > 0 ? (
         <span className="text-xs text-muted">
           {t(I18nKey.ORG_CHART$SUB_TEAMS, { count: node.child_ids.length })}
@@ -93,12 +96,12 @@ export function NodeCard({
       data-testid={`org-node-${node.id}`}
       data-current={current || undefined}
       className={cn(
-        "h-14 w-40 rounded-lg border bg-surface",
+        "h-18 w-40 rounded-lg border bg-surface",
         current ? "border-primary ring-1 ring-primary" : "border-border",
       )}
     >
       <Tooltip
-        content={<NodeHoverCard node={node} titleOf={titleOf} />}
+        content={<NodeHoverCard node={node} />}
         placement="bottom"
         delay={300}
       >
