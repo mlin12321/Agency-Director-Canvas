@@ -57,7 +57,7 @@ Both app and library builds include the full SIL OFL 1.1 license as
    `color-theme/definitions/index.ts`. The settings menu is generated from this
    registry.
 3. Select a Prism palette in `syntax-highlighter-themes.ts`, a Monaco palette in
-   `file-diff-viewer.tsx`, and all 16 ANSI colors in `terminal-themes.ts`.
+   `file-diff-view.tsx`, and all 16 ANSI colors in `terminal-themes.ts`.
    These mappings are exhaustive so new themes cannot silently inherit a dark
    code or terminal palette.
 4. Run the theme tests and inspect settings, portalled menus/modals, chat

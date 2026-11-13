@@ -4,6 +4,8 @@ import {
   type BoundaryMemory,
   type DirectorSettings,
   type DirectorSettingsState,
+  type FileEdit,
+  type FileSides,
   type NodeBlackboard,
   type NodeId,
   type NodeOwnership,
@@ -16,6 +18,7 @@ import {
   type RoutedMessage,
   type RouteMessageRequest,
   type Side,
+  type TeamChanges,
   type TeamMatch,
 } from "./types";
 
@@ -117,6 +120,30 @@ export const DirectorClient = {
 
   getNodeOwnership(nodeId: NodeId) {
     return requestJson<NodeOwnership>(nodePath(nodeId, "ownership"));
+  },
+
+  /** The files a team changed since its work started or was accepted. */
+  getNodeChanges(nodeId: NodeId) {
+    return requestJson<TeamChanges>(nodePath(nodeId, "changes"));
+  },
+
+  /** One file at the team's base commit and in its checkout now. */
+  getNodeChangedFile(nodeId: NodeId, path: string) {
+    const query = new URLSearchParams({ path });
+    return requestJson<FileSides>(nodePath(nodeId, `changes/file?${query}`));
+  },
+
+  /**
+   * Write one file of a team by hand. It is committed alone and the team's
+   * IC is told. Refused with 409 while an agent of the team is working.
+   */
+  editNodeFile(nodeId: NodeId, path: string, content: string) {
+    const query = new URLSearchParams({ path });
+    return requestJson<FileEdit>(nodePath(nodeId, `files?${query}`), {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content }),
+    });
   },
 
   teach(nodeId: NodeId, rule: string) {
