@@ -9,6 +9,8 @@ import type {
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
 import { BoundaryMemory } from "./boundary-memory";
+import { ReviewSummary } from "./review-summary";
+import { SpecAndContracts } from "./spec-and-contracts";
 import {
   ENFORCEMENT_LABEL_KEYS,
   ROLE_LABEL_KEYS,
@@ -75,7 +77,7 @@ export function AgentInspectorDrawer({
         </button>
       </div>
 
-      <div className="flex flex-col gap-3 border-b border-border p-3">
+      <div className="flex max-h-2/5 flex-col gap-3 overflow-y-auto border-b border-border p-3">
         {enforcement ? (
           <p className="text-xs text-muted">
             {t(ENFORCEMENT_LABEL_KEYS[enforcement], {
@@ -83,6 +85,8 @@ export function AgentInspectorDrawer({
             })}
           </p>
         ) : null}
+        {node.review ? <ReviewSummary review={node.review} /> : null}
+        <SpecAndContracts node={node} />
         <BoundaryMemory node={node} />
       </div>
 
@@ -108,6 +112,13 @@ export function AgentInspectorDrawer({
         ))}
       </div>
 
+      {agent?.conversation_id ? (
+        <p className="border-b border-border px-3 py-1.5 text-xs text-muted">
+          {t(I18nKey.ORG_CHART$MESSAGE_AGENT_HINT, {
+            role: t(ROLE_LABEL_KEYS[agent.role]),
+          })}
+        </p>
+      ) : null}
       <div className="min-h-0 flex-1">
         {agent?.conversation_id ? (
           <React.Suspense fallback={null}>

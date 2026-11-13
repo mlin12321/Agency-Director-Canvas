@@ -1,6 +1,7 @@
 import { getEffectiveLocalBackend } from "../backend-registry/active-store";
 import {
   DIRECTOR_BASE_PATH,
+  type BlackboardSync,
   type BoundaryMemory,
   type NodeBlackboard,
   type NodeId,
@@ -113,6 +114,22 @@ export const DirectorClient = {
 
   teach(nodeId: NodeId, rule: string) {
     return postJson<BoundaryMemory>(nodePath(nodeId, "teach"), { rule });
+  },
+
+  /**
+   * Take in the blackboard a remote of the repository has. Nothing leaves
+   * this machine.
+   */
+  pullBlackboard(remote = "origin") {
+    return postJson<BlackboardSync>(`${ORG_PATH}/blackboard/pull`, { remote });
+  },
+
+  /**
+   * Give a remote of the repository the local blackboard, after taking in
+   * what the remote has that it lacks.
+   */
+  pushBlackboard(remote = "origin") {
+    return postJson<BlackboardSync>(`${ORG_PATH}/blackboard/push`, { remote });
   },
 };
 

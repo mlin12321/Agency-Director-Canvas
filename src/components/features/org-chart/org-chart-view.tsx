@@ -13,6 +13,7 @@ import { I18nKey } from "#/i18n/declaration";
 import { useOrgChartStore } from "#/stores/org-chart-store";
 import { cn } from "#/utils/utils";
 import { AgentInspectorDrawer } from "./agent-inspector-drawer";
+import { BlackboardSync } from "./blackboard-sync";
 import { ChartToolbar } from "./chart-toolbar";
 import { EscalationsPanel } from "./escalations-panel";
 import { FocusedChart, fitFocusedChart } from "./focused-chart";
@@ -174,6 +175,7 @@ export function OrgChartView({ nodeId }: OrgChartViewProps) {
                 {t(I18nKey.ORG_CHART$RECONNECTING)}
               </span>
             ) : null}
+            {org.data && !org.data.fixture ? <BlackboardSync /> : null}
             <ChartToolbar />
           </div>
         </div>

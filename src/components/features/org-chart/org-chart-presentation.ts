@@ -4,6 +4,7 @@ import type {
   EscalationKind,
   IsolationMode,
   NodeStatus,
+  ReviewState,
   SplitStatus,
 } from "#/api/director/types";
 import { I18nKey } from "#/i18n/declaration";
@@ -48,4 +49,11 @@ export const SPLIT_LABEL_KEYS: Record<SplitStatus, I18nKey> = {
   proposed: I18nKey.ORG_CHART$SPLIT_PROPOSED,
   refine_requested: I18nKey.ORG_CHART$SPLIT_REFINE_REQUESTED,
   approved: I18nKey.ORG_CHART$SPLIT_APPROVED,
+};
+
+export const REVIEW_LABEL_KEYS: Record<ReviewState, I18nKey> = {
+  pending: I18nKey.ORG_CHART$REVIEW_PENDING,
+  changes_requested: I18nKey.ORG_CHART$REVIEW_CHANGES_REQUESTED,
+  accepted: I18nKey.ORG_CHART$REVIEW_ACCEPTED,
+  unreviewed: I18nKey.ORG_CHART$REVIEW_UNREVIEWED,
 };

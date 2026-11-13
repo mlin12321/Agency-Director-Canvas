@@ -1,10 +1,11 @@
 import React from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { DirectorClient } from "#/api/director/director-client";
 import type { NodeBlackboard, OrgNode } from "#/api/director/types";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { DIRECTOR_QUERY_KEYS } from "#/hooks/query/query-keys";
+import { useNodeBlackboard } from "#/hooks/query/use-node-blackboard";
 import { I18nKey } from "#/i18n/declaration";
 
 interface BoundaryMemoryProps {
@@ -23,11 +24,7 @@ export function BoundaryMemory({ node }: BoundaryMemoryProps) {
   const [draft, setDraft] = React.useState("");
   const inputId = React.useId();
 
-  const blackboard = useQuery({
-    queryKey,
-    queryFn: () => DirectorClient.getNodeBlackboard(node.id),
-    retry: false,
-  });
+  const blackboard = useNodeBlackboard(node.id);
 
   const teach = useMutation({
     mutationFn: (rule: string) => DirectorClient.teach(node.id, rule),

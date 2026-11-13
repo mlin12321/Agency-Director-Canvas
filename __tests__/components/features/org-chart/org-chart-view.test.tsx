@@ -11,6 +11,7 @@ import type {
   NodeStatus,
   OrgEvent,
   OrgSummary,
+  Review,
   SplitProposal,
 } from "#/api/director/types";
 import { subscribeOrgTree } from "#/api/director/director-client";
@@ -1586,6 +1587,333 @@ describe("OrgChartView", () => {
 
       expect(
         screen.queryByRole("region", { name: "ORG_CHART$OWNERSHIP_TITLE" }),
+      ).toBeNull();
+    });
+  });
+
+  describe("the review of finished work", () => {
+    const REVIEW: Review = {
+      state: "changes_requested",
+      round: 2,
+      summary: "Tokens are issued.",
+      automated_ran: true,
+      automated: [
+        {
+          path: "services/auth/token.py",
+          line: 12,
+          issue: "The token never expires.",
+          evidence: "expires_at = None",
+        },
+      ],
+      findings: [
+        { path: "", line: null, issue: "Add a refresh test.", evidence: "" },
+      ],
+      at: "2026-11-12T10:00:00+00:00",
+    };
+
+    function reviewMark(id: string, state: string) {
+      return within(card(id)).queryByRole("img", {
+        name: `ORG_CHART$REVIEW_${state}`,
+      });
+    }
+
+    it("marks the cards of teams whose work waits for review or was sent back, and no other", async () => {
+      store.upsert({
+        ...input("auth", "root", "working", "services/auth"),
+        review: REVIEW,
+      });
+      store.upsert({
+        ...input("search", "root", "done", "services/search"),
+        review: { ...REVIEW, state: "pending", round: 1 },
+      });
+      store.upsert({
+        ...input("billing", "root", "done", "services/billing"),
+        review: { ...REVIEW, state: "accepted" },
+      });
+      renderWithProviders(<OrgChartView nodeId="root" />);
+      await findCard("auth");
+
+      expect(reviewMark("auth", "CHANGES_REQUESTED")).toBeInTheDocument();
+      expect(reviewMark("search", "PENDING")).toBeInTheDocument();
+      expect(reviewMark("billing", "ACCEPTED")).toBeNull();
+      expect(reviewMark("root", "PENDING")).toBeNull();
+    });
+
+    it("says in the team's details where the review stands and what was found", async () => {
+      blackboardHandlers();
+      store.upsert({
+        ...input("auth", "root", "working", "services/auth"),
+        review: REVIEW,
+      });
+      const user = userEvent.setup();
+      renderWithProviders(<OrgChartView nodeId="auth" />);
+      await findCard("auth");
+
+      await user.click(currentCard());
+
+      const review = within(screen.getByRole("dialog")).getByRole("region", {
+        name: "ORG_CHART$REVIEW",
+      });
+      expect(review).toHaveTextContent(
+        "ORG_CHART$REVIEW_CHANGES_REQUESTED · ORG_CHART$REVIEW_ROUND",
+      );
+      expect(review).toHaveTextContent("Tokens are issued.");
+      expect(review).toHaveTextContent("Add a refresh test.");
+      expect(review).toHaveTextContent("services/auth/token.py:12");
+      expect(review).toHaveTextContent("The token never expires.");
+      expect(review).toHaveTextContent("expires_at = None");
+    });
+
+    it("says when the automated review found nothing, and when it did not run", async () => {
+      blackboardHandlers();
+      store.upsert({
+        ...input("auth", "root", "done", "services/auth"),
+        review: { ...REVIEW, state: "pending", round: 1, automated: [] },
+      });
+      const user = userEvent.setup();
+      renderWithProviders(<OrgChartView nodeId="auth" />);
+      await findCard("auth");
+      await user.click(currentCard());
+      const review = within(screen.getByRole("dialog")).getByRole("region", {
+        name: "ORG_CHART$REVIEW",
+      });
+
+      expect(review).toHaveTextContent("ORG_CHART$REVIEW_AUTOMATED_NONE");
+      expect(review).not.toHaveTextContent("ORG_CHART$REVIEW_ROUND");
+
+      act(() => {
+        store.upsert({
+          ...input("auth", "root", "done", "services/auth"),
+          review: {
+            ...REVIEW,
+            state: "pending",
+            round: 1,
+            automated: [],
+            automated_ran: false,
+          },
+        });
+      });
+
+      await waitFor(() =>
+        expect(review).toHaveTextContent("ORG_CHART$REVIEW_AUTOMATED_SKIPPED"),
+      );
+    });
+
+    it("shows no review for a team that has reported nothing", async () => {
+      blackboardHandlers();
+      const user = userEvent.setup();
+      renderWithProviders(<OrgChartView nodeId="auth" />);
+      await findCard("auth");
+
+      await user.click(currentCard());
+
+      expect(
+        within(screen.getByRole("dialog")).queryByRole("region", {
+          name: "ORG_CHART$REVIEW",
+        }),
+      ).toBeNull();
+    });
+  });
+
+  describe("what a team works to", () => {
+    function specHandlers(blackboard: Partial<NodeBlackboard>) {
+      server.use(
+        http.get("*/api/director/org/nodes/:nodeId/blackboard", () =>
+          HttpResponse.json({
+            specs: [],
+            memory: { rules: [] },
+            autopsies: [],
+            ...blackboard,
+          } satisfies NodeBlackboard),
+        ),
+      );
+    }
+
+    async function openSpec() {
+      const user = userEvent.setup();
+      renderWithProviders(<OrgChartView nodeId="auth" />);
+      await findCard("auth");
+      await user.click(currentCard());
+      return screen.findByRole("region", { name: "ORG_CHART$SPEC_TITLE" });
+    }
+
+    it("lets the team's spec and both sets of contracts be read", async () => {
+      specHandlers({
+        specs: [
+          {
+            path: "services/auth",
+            spec: "Tokens are opaque.",
+            readonly: false,
+          },
+        ],
+        contracts: [
+          { path: "", contracts: "POST /login returns a token.", own: false },
+          {
+            path: "services/auth",
+            contracts: "OAuth hands over a user id.",
+            own: true,
+          },
+        ],
+      });
+
+      const section = await openSpec();
+
+      expect(section).toHaveTextContent("ORG_CHART$SPEC_OPEN");
+      expect(section).toHaveTextContent("Tokens are opaque.");
+      expect(
+        within(section)
+          .getByText("ORG_CHART$CONTRACTS_ABOVE")
+          .closest("details"),
+      ).toHaveTextContent("POST /login returns a token.");
+      expect(
+        within(section).getByText("ORG_CHART$CONTRACTS_OWN").closest("details"),
+      ).toHaveTextContent("OAuth hands over a user id.");
+    });
+
+    it("says so when the team has written no spec", async () => {
+      specHandlers({});
+
+      const section = await openSpec();
+
+      expect(section).toHaveTextContent("ORG_CHART$SPEC_EMPTY");
+      expect(within(section).queryByRole("group")).toBeNull();
+    });
+
+    it("says whose conversation a message goes to, once that agent has one", async () => {
+      blackboardHandlers();
+      const user = userEvent.setup();
+      renderWithProviders(<OrgChartView nodeId="auth" />);
+      await findCard("auth");
+      await user.click(currentCard());
+      const drawer = screen.getByRole("dialog");
+
+      expect(
+        within(drawer).queryByText("ORG_CHART$MESSAGE_AGENT_HINT"),
+      ).toBeNull();
+
+      await user.click(
+        within(drawer).getByRole("button", { name: /ORG_CHART\$ROLE_MANAGER/ }),
+      );
+
+      expect(
+        within(drawer).getByText("ORG_CHART$MESSAGE_AGENT_HINT"),
+      ).toBeInTheDocument();
+      expect(await screen.findByTestId("conversation-view")).toHaveTextContent(
+        "conv-manager",
+      );
+    });
+  });
+
+  describe("sharing the org's memory", () => {
+    function liveOrg() {
+      server.use(
+        http.get("*/api/director/org", () =>
+          HttpResponse.json({
+            root_id: "root",
+            node_count: 5,
+            repo_path: "/work/shop",
+            is_git_repository: true,
+            fixture: false,
+            boundary_enforcement: "checks",
+          } satisfies OrgSummary),
+        ),
+      );
+    }
+
+    function sharing() {
+      return screen.findByRole("group", { name: "ORG_CHART$SHARED_MEMORY" });
+    }
+
+    it("pulls from origin and says what came of it", async () => {
+      liveOrg();
+      const asked: unknown[] = [];
+      server.use(
+        http.post("*/api/director/org/blackboard/pull", async ({ request }) => {
+          asked.push(await request.json());
+          return HttpResponse.json({
+            remote: "origin",
+            head: "abc",
+            changed: true,
+            kept_local: ["services/auth/spec.md"],
+            pushed: false,
+          });
+        }),
+      );
+      const user = userEvent.setup();
+      renderWithProviders(<OrgChartView nodeId="root" />);
+
+      await user.click(
+        within(await sharing()).getByRole("button", {
+          name: "ORG_CHART$BLACKBOARD_PULL",
+        }),
+      );
+
+      const outcome = await screen.findByText(/ORG_CHART\$BLACKBOARD_PULLED/);
+      expect(outcome).toHaveTextContent("ORG_CHART$BLACKBOARD_KEPT_LOCAL");
+      expect(asked).toEqual([{ remote: "origin" }]);
+    });
+
+    it("pushes to origin, and says when there was nothing new or it failed", async () => {
+      liveOrg();
+      let fail = false;
+      server.use(
+        http.post("*/api/director/org/blackboard/push", () =>
+          fail
+            ? HttpResponse.json({ detail: "unreachable" }, { status: 502 })
+            : HttpResponse.json({
+                remote: "origin",
+                head: "abc",
+                changed: false,
+                kept_local: [],
+                pushed: true,
+              }),
+        ),
+        http.post("*/api/director/org/blackboard/pull", () =>
+          HttpResponse.json({
+            remote: "origin",
+            head: "abc",
+            changed: false,
+            kept_local: [],
+            pushed: false,
+          }),
+        ),
+      );
+      const user = userEvent.setup();
+      renderWithProviders(<OrgChartView nodeId="root" />);
+      const group = await sharing();
+      const push = within(group).getByRole("button", {
+        name: "ORG_CHART$BLACKBOARD_PUSH",
+      });
+
+      await user.click(push);
+      expect(
+        await screen.findByText("ORG_CHART$BLACKBOARD_PUSHED"),
+      ).toBeInTheDocument();
+
+      await user.click(
+        within(group).getByRole("button", {
+          name: "ORG_CHART$BLACKBOARD_PULL",
+        }),
+      );
+      expect(
+        await screen.findByText("ORG_CHART$BLACKBOARD_UP_TO_DATE"),
+      ).toBeInTheDocument();
+
+      fail = true;
+      await user.click(push);
+      expect(
+        await screen.findByText("ORG_CHART$BLACKBOARD_ERROR"),
+      ).toHaveAttribute("role", "alert");
+      expect(screen.queryByText("ORG_CHART$BLACKBOARD_UP_TO_DATE")).toBeNull();
+    });
+
+    it("is not offered for the sample org", async () => {
+      renderWithProviders(<OrgChartView nodeId="root" />);
+      await findCard("root");
+      await screen.findByText(/ORG_CHART\$TALK_HINT/);
+
+      expect(
+        screen.queryByRole("group", { name: "ORG_CHART$SHARED_MEMORY" }),
       ).toBeNull();
     });
   });
