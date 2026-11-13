@@ -1,5 +1,5 @@
 import React from "react";
-import { Ellipsis } from "lucide-react";
+import { ArrowUp, Ellipsis } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { NodeId, OrgNode } from "#/api/director/types";
 import { NavigationLink } from "#/components/shared/navigation-link";
@@ -21,18 +21,19 @@ interface FocusedChartProps {
 const LINE = "w-px bg-border";
 
 // Sizes in px of what `FocusedChart` draws, for working out what fits.
-// They mirror its classes: w-40 h-18 cards, gap-4, h-4 lines, size-4 icons.
+// They mirror its classes: w-40 h-18 cards, gap-4, h-4 lines, size-4 icons,
+// an h-6 way up.
 const CARD_WIDTH = 160;
 const CARD_HEIGHT = 72;
 const GAP = 16;
-const UP_MARKER = 32;
+const UP_MARKER = 40;
 const TEAM_TO_REPORTS = 29;
 const DOWN_MARKER = 24;
 
 /** Below this the names stop being readable; the chart scrolls instead. */
 const MIN_SCALE = 0.4;
 /** A small team is enlarged up to this, not until it fills the space. */
-const MAX_SCALE = 1.25;
+const MAX_SCALE = 1.6;
 
 interface FocusedChartFit {
   columns: number;
@@ -106,9 +107,9 @@ function More() {
 }
 
 /**
- * One team and its direct reports. The rest of the org is only hinted at:
- * an ellipsis above the team when there is a team above it, and one below
- * each report that has sub-teams of its own.
+ * One team and its direct reports. The rest of the org is not drawn: above
+ * the team is the way up to the team above it, when there is one, and below
+ * each report that has sub-teams of its own is an ellipsis.
  */
 export function FocusedChart({
   current,
@@ -128,10 +129,13 @@ export function FocusedChart({
       {parent ? (
         <NavigationLink
           to={orgNodePath(parent.id)}
-          aria-label={t(I18nKey.ORG_CHART$GO_UP, { title: parent.title })}
+          title={t(I18nKey.ORG_CHART$GO_UP, { title: parent.title })}
           className="group flex flex-col items-center text-muted hover:text-contrast"
         >
-          <More />
+          <span className="flex h-6 items-center gap-1 rounded-md border border-border px-2 text-[11px] font-medium group-hover:border-contrast">
+            <ArrowUp width={12} height={12} aria-hidden="true" />
+            {t(I18nKey.ORG_CHART$UP_ONE_LEVEL)}
+          </span>
           <span
             aria-hidden="true"
             className={`h-4 ${LINE} group-hover:bg-contrast`}

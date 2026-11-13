@@ -4,7 +4,8 @@ import { useTranslation } from "react-i18next";
 import { DirectorClient } from "#/api/director/director-client";
 import type { NodeId, OrgNode } from "#/api/director/types";
 import { NavigationLink } from "#/components/shared/navigation-link";
-import { ORG_CHART_PATH } from "#/constants/org-chart";
+import { ORG_CHART_PATH, orgNodePath } from "#/constants/org-chart";
+import { useNavigation } from "#/context/navigation-context";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { DIRECTOR_QUERY_KEYS } from "#/hooks/query/query-keys";
 import { useNodeOwnership } from "#/hooks/query/use-node-ownership";
@@ -13,6 +14,7 @@ import { I18nKey } from "#/i18n/declaration";
 import { useOrgChartStore } from "#/stores/org-chart-store";
 import { cn } from "#/utils/utils";
 import { AgentInspectorDrawer } from "./agent-inspector-drawer";
+import { BlackboardSync } from "./blackboard-sync";
 import { ChartToolbar } from "./chart-toolbar";
 import { EscalationsPanel } from "./escalations-panel";
 import { FocusedChart, fitFocusedChart } from "./focused-chart";
@@ -56,6 +58,8 @@ function ancestorsOf(node: OrgNode, nodes: ReadonlyMap<NodeId, OrgNode>) {
 
 /** Kept free on each axis around one team's chart: the padding and more. */
 const CHART_MARGIN = 48;
+/** How much the whole org is enlarged before the reader zooms. */
+const FULL_SCALE = 1.25;
 
 /**
  * An org chart of agent teams. It is on one team at a time and draws either
@@ -105,6 +109,23 @@ export function OrgChartView({ nodeId }: OrgChartViewProps) {
   }, [frame]);
   const top = focusId === null ? null : (nodes.get(focusId) ?? null);
   const current = full && nodeId !== null ? (nodes.get(nodeId) ?? null) : top;
+  // Alt+ArrowUp goes to the team above, which the chart does not draw.
+  const { navigate } = useNavigation();
+  const parentId = current?.parent_id ?? null;
+  React.useEffect(() => {
+    if (parentId === null || detailsId !== null) return undefined;
+    const onKeyDown = (event: KeyboardEvent) => {
+      const typing =
+        event.target instanceof HTMLElement &&
+        event.target.closest("input, textarea, select, [contenteditable]");
+      if (event.altKey && event.key === "ArrowUp" && !typing) {
+        event.preventDefault();
+        navigate(orgNodePath(parentId));
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [parentId, detailsId, navigate]);
   // A server without the route answers with an error and gets no map.
   const ownership = useNodeOwnership(current).data;
   const colliding = React.useMemo(
@@ -153,7 +174,7 @@ export function OrgChartView({ nodeId }: OrgChartViewProps) {
   // One team is zoomed to be as large as fits. The whole org is not fitted:
   // it scrolls.
   const fit = full
-    ? { columns: 1, scale: 1 }
+    ? { columns: 1, scale: FULL_SCALE }
     : fitFocusedChart(
         {
           reports: reports.length,
@@ -174,6 +195,7 @@ export function OrgChartView({ nodeId }: OrgChartViewProps) {
                 {t(I18nKey.ORG_CHART$RECONNECTING)}
               </span>
             ) : null}
+            {org.data && !org.data.fixture ? <BlackboardSync /> : null}
             <ChartToolbar />
           </div>
         </div>

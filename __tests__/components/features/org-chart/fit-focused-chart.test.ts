@@ -25,11 +25,11 @@ describe("fitFocusedChart", () => {
     expect(fit.scale).toBeCloseTo(1000 / 864);
   });
 
-  it("enlarges a small team by a quarter and no further, in one row", () => {
+  it("enlarges a small team by six tenths and no further, in one row", () => {
     const vast = { width: 4000, height: 3000 };
 
-    expect(fitFocusedChart(team(0), vast)).toEqual({ columns: 1, scale: 1.25 });
-    expect(fitFocusedChart(team(3), vast)).toEqual({ columns: 3, scale: 1.25 });
+    expect(fitFocusedChart(team(0), vast)).toEqual({ columns: 1, scale: 1.6 });
+    expect(fitFocusedChart(team(3), vast)).toEqual({ columns: 3, scale: 1.6 });
   });
 
   it("shrinks a team that does not fit at its own size", () => {

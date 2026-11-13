@@ -90,6 +90,46 @@ export interface SplitProposal {
   proposed_at: string;
 }
 
+/**
+ * `pending`: the IC of the team above has the work to review. `unreviewed`:
+ * the root team's, which has nobody above.
+ */
+export type ReviewState =
+  "pending" | "changes_requested" | "accepted" | "unreviewed";
+
+/** One thing a review found wrong in a team's work. */
+export interface ReviewFinding {
+  /** The file, relative to the repository; `""` when it is about no one file. */
+  path: string;
+  line: number | null;
+  issue: string;
+  evidence: string;
+}
+
+/**
+ * The review of the work a team reported as done. The IC of the team above
+ * reviews it; before that, the team's own IC is asked to describe the changes
+ * and to review them.
+ */
+export interface Review {
+  state: ReviewState;
+  /** 1 the first time; one more each time the work comes back. */
+  round: number;
+  /** What the team said it delivered. */
+  summary: string;
+  /** The team's own account of what it changed, as markdown. Absent on a
+   * server that asks for none. */
+  description?: string;
+  /** Whether the team's IC, asked to review the changes, gave an answer. */
+  automated_ran: boolean;
+  /** What it found. */
+  automated: ReviewFinding[];
+  /** What the reviewing IC wants changed, when it asked. */
+  findings: ReviewFinding[];
+  /** ISO 8601 timestamp of the last change. */
+  at: string;
+}
+
 export interface OrgNode {
   id: NodeId;
   parent_id: NodeId | null;
@@ -111,6 +151,11 @@ export interface OrgNode {
   escalations: Escalation[];
   /** A split of this node's boundary that is not carried out yet. */
   pending_split: SplitProposal | null;
+  /**
+   * The review of what the team last reported as done. Absent on a server
+   * that has no reviews.
+   */
+  review?: Review | null;
   /**
    * Status of every node below this one, so a parent can summarize its whole
    * subtree without the client loading it.
@@ -265,6 +310,22 @@ export interface NodeOwnership {
  * tree that waits on the human. Node events are limited to that same set of
  * nodes; an `escalations` event carries the whole new list.
  */
+/** What a pull or a push of the blackboard did. */
+export interface BlackboardSync {
+  remote: string;
+  /** The local blackboard's commit afterwards; `null` when it is empty. */
+  head: string | null;
+  /** The local blackboard took in remote changes. */
+  changed: boolean;
+  /**
+   * Specs and contracts both sides had changed. The local text was kept;
+   * the remote text is in the blackboard's history.
+   */
+  kept_local: string[];
+  /** The remote now has the local blackboard. */
+  pushed: boolean;
+}
+
 export type OrgEvent =
   | {
       type: "snapshot";

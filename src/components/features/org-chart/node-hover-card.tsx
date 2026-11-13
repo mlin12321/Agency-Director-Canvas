@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next";
 import type { OrgNode } from "#/api/director/types";
 import { I18nKey } from "#/i18n/declaration";
 import { StatusBadge } from "./status-badge";
+import { useReviewLabel } from "./review-summary";
 import {
   ESCALATION_LABEL_KEYS,
   ISOLATION_LABEL_KEYS,
@@ -35,6 +36,7 @@ interface NodeHoverCardProps {
 export function NodeHoverCard({ node }: NodeHoverCardProps) {
   const { t } = useTranslation("openhands");
   const { boundary } = node;
+  const reviewLabel = useReviewLabel();
   // What a team above still holds is that team's to settle, not the human's.
   const waiting = node.escalations.filter(
     (escalation) => escalation.held_by === null,
@@ -53,6 +55,11 @@ export function NodeHoverCard({ node }: NodeHoverCardProps) {
         <Row label={t(I18nKey.ORG_CHART$STATUS)}>
           <StatusBadge status={node.status} />
         </Row>
+        {node.review ? (
+          <Row label={t(I18nKey.ORG_CHART$REVIEW)}>
+            {reviewLabel(node.review)}
+          </Row>
+        ) : null}
         <Row label={t(I18nKey.ORG_CHART$BOUNDARY)}>
           <code className="break-all">
             {boundary.path || t(I18nKey.ORG_CHART$BOUNDARY_ROOT)}
