@@ -7,7 +7,9 @@ import type {
   OrgNode,
   TeamMatch,
 } from "#/api/director/types";
+import { AgentInspectorDrawer } from "#/components/features/org-chart/agent-inspector-drawer";
 import { NodeCard } from "#/components/features/org-chart/node-card";
+import { NodeHoverCard } from "#/components/features/org-chart/node-hover-card";
 import { OrgSettings } from "#/components/features/org-chart/org-settings";
 import { TeamSearch } from "#/components/features/org-chart/team-search";
 import { server } from "#/mocks/node";
@@ -153,6 +155,51 @@ describe("OrgSettings", () => {
     );
   });
 
+  it("lets the agent profiles a sub-team may run on be chosen, where the server has them", async () => {
+    const saved = settingsHandlers({ ...STATE, allowed_profiles: ["gone"] });
+    server.use(
+      http.get("*/api/agent-profiles", () =>
+        HttpResponse.json({
+          profiles: [
+            { id: "1", name: "default", agent_kind: "openhands" },
+            { id: "2", name: "codex", agent_kind: "acp" },
+          ],
+          active_agent_profile_id: "1",
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<OrgSettings />);
+    const modal = await openSettings(user);
+
+    // One that was allowed and is no longer stored can still be unticked.
+    expect(within(modal).getByRole("checkbox", { name: "gone" })).toBeChecked();
+    await user.click(
+      await within(modal).findByRole("checkbox", { name: "codex" }),
+    );
+    await user.click(within(modal).getByRole("checkbox", { name: "gone" }));
+    await user.click(
+      within(modal).getByRole("button", { name: "BUTTON$SAVE" }),
+    );
+
+    await waitFor(() =>
+      expect(screen.queryByTestId("org-settings-modal")).toBeNull(),
+    );
+    expect(saved).toEqual([
+      { max_agents: 64, max_depth: 8, allowed_profiles: ["codex"] },
+    ]);
+  });
+
+  it("offers no profiles on a server that cannot give a sub-team another agent", async () => {
+    settingsHandlers();
+    const user = userEvent.setup();
+    renderWithProviders(<OrgSettings />);
+
+    const modal = await openSettings(user);
+
+    expect(within(modal).queryByRole("checkbox")).toBeNull();
+  });
+
   it("offers nothing on a server without the settings", async () => {
     let asked = false;
     server.use(
@@ -290,5 +337,74 @@ describe("NodeCard", () => {
 
     expect(screen.getByText("Token refresh")).toBeInTheDocument();
     expect(screen.queryByText("ORG_CHART$WAITING_TO_START")).toBeNull();
+  });
+
+  it("names an external agent and the profile a team runs on in its hover card", () => {
+    renderWithProviders(
+      <NodeHoverCard
+        node={{
+          ...NODE,
+          agent_profile: "codex",
+          agents: [
+            {
+              role: "ic",
+              conversation_id: "c1",
+              status: "working",
+              kind: "acp",
+              acp_server: "codex",
+            },
+            {
+              role: "manager",
+              conversation_id: "c2",
+              status: "idle",
+              kind: "acp",
+              acp_server: null,
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        "ORG_CHART$ROLE_IC (working · Codex), ORG_CHART$ROLE_MANAGER (idle · ORG_CHART$EXTERNAL_AGENT)",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText("codex")).toBeInTheDocument();
+  });
+
+  it("says in the details how the team itself is held, over what the server says of the org", () => {
+    const team = {
+      ...NODE,
+      agents: [
+        {
+          role: "ic" as const,
+          conversation_id: null,
+          status: "idle",
+          kind: "acp" as const,
+          acp_server: "claude-code",
+        },
+      ],
+    };
+    const { rerender } = renderWithProviders(
+      <AgentInspectorDrawer
+        node={{ ...team, boundary_enforcement: "merge" }}
+        enforcement="checks"
+        onClose={() => {}}
+      />,
+    );
+
+    expect(screen.getByText("ORG_CHART$ENFORCED_MERGE")).toBeInTheDocument();
+    expect(screen.getByText("Claude Code")).toBeInTheDocument();
+
+    rerender(
+      <AgentInspectorDrawer
+        node={team}
+        enforcement="checks"
+        onClose={() => {}}
+      />,
+    );
+
+    expect(screen.getByText("ORG_CHART$ENFORCED_CHECKS")).toBeInTheDocument();
   });
 });

@@ -1,11 +1,12 @@
 import type {
+  AgentRef,
   AgentRole,
-  BoundaryEnforcement,
   EscalationKind,
   IsolationMode,
   NodeStatus,
   ReviewState,
   SplitStatus,
+  TeamEnforcement,
 } from "#/api/director/types";
 import { I18nKey } from "#/i18n/declaration";
 
@@ -40,10 +41,29 @@ export const ESCALATION_LABEL_KEYS: Record<EscalationKind, I18nKey> = {
   design_decision: I18nKey.ORG_CHART$ESCALATION_DECISION,
 };
 
-export const ENFORCEMENT_LABEL_KEYS: Record<BoundaryEnforcement, I18nKey> = {
+export const ENFORCEMENT_LABEL_KEYS: Record<TeamEnforcement, I18nKey> = {
   sandbox: I18nKey.ORG_CHART$ENFORCED_SANDBOX,
   checks: I18nKey.ORG_CHART$ENFORCED_CHECKS,
+  merge: I18nKey.ORG_CHART$ENFORCED_MERGE,
 };
+
+// Product names, the same in every language.
+const EXTERNAL_AGENT_NAMES: Record<string, string> = {
+  "claude-code": "Claude Code",
+  codex: "Codex",
+  "gemini-cli": "Gemini CLI",
+  pi: "Pi",
+  opencode: "OpenCode",
+};
+
+/**
+ * The product an external agent is, when the server could tell; `null` for
+ * an OpenHands agent and for an external one it could not name.
+ */
+export function externalAgentName(agent: AgentRef): string | null {
+  if (agent.kind !== "acp" || !agent.acp_server) return null;
+  return EXTERNAL_AGENT_NAMES[agent.acp_server] ?? agent.acp_server;
+}
 
 export const SPLIT_LABEL_KEYS: Record<SplitStatus, I18nKey> = {
   proposed: I18nKey.ORG_CHART$SPLIT_PROPOSED,
