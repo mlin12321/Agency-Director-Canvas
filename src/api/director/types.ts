@@ -265,6 +265,8 @@ export interface OrgSummary {
    * when the org runs. Absent on a server that cannot pause an org.
    */
   paused?: PauseReason | null;
+  /** A pull stopped on conflicts and waits for choices. */
+  merging?: boolean;
 }
 
 /**
@@ -435,6 +437,55 @@ export interface BlackboardSync {
   kept_local: string[];
   /** The remote now has the local blackboard. */
   pushed: boolean;
+}
+
+export type Side = "mine" | "theirs";
+
+/**
+ * Something both sides of a pull changed. `field`: one field of a team.
+ * `team`: one side removed a team the other changed. `file`: both changed
+ * the same lines of a spec or of contracts.
+ */
+export interface OrgConflict {
+  /** Names the conflict in a resolve request. */
+  id: string;
+  kind: "field" | "team" | "file";
+  /** The team; "" for a file of the blackboard. */
+  node_id: NodeId;
+  title: string;
+  /** The field, or the file's path. */
+  field: string;
+  /** What is here; `null` when removed here. */
+  mine: string | null;
+  /** What the remote has; `null` when removed there. */
+  theirs: string | null;
+  choice: Side | null;
+}
+
+/** A pull that stopped because both sides changed the same thing. */
+export interface OrgMerge {
+  remote: string;
+  conflicts: OrgConflict[];
+}
+
+/** What a pull or a push did with the branch of one team's work. */
+export interface BranchSync {
+  node_id: NodeId;
+  title: string;
+  branch: string;
+  result: "created" | "fast_forwarded" | "diverged" | "pushed";
+}
+
+/** What a pull or a push of the org did. */
+export interface OrgSync {
+  remote: string;
+  result: "up_to_date" | "fast_forward" | "merged" | "conflicts" | "pushed";
+  /** The merge waiting for choices, when `result` is `conflicts`. */
+  merge: OrgMerge | null;
+  blackboard: BlackboardSync | null;
+  branches: BranchSync[];
+  /** Unfinished work dropped because its team was changed. */
+  put_aside: RecoveryItem[];
 }
 
 export type OrgEvent =

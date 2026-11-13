@@ -4,6 +4,7 @@ import { NavigationLink } from "#/components/shared/navigation-link";
 import { useNavigation } from "#/context/navigation-context";
 import { I18nKey } from "#/i18n/declaration";
 import { useOpenFolderRequestStore } from "#/stores/open-folder-request-store";
+import { OrgSync } from "./org-sync";
 
 /** Where conversations are started and folders are chosen. */
 export const HOME_PATH = "/conversations";
@@ -50,6 +51,8 @@ export function StartOrgNotice({ org }: { org: OrgSummary }) {
       <NavigationLink to={HOME_PATH} className={ACTION_CLASS}>
         {t(I18nKey.ORG_CHART$START_SUBMIT)}
       </NavigationLink>
+      {/* A clone has no org until it takes in the one its remote has. */}
+      {org.fixture ? null : <OrgSync canPush={false} />}
     </>
   );
 }

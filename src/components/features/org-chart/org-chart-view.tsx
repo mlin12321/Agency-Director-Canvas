@@ -14,12 +14,13 @@ import { I18nKey } from "#/i18n/declaration";
 import { useOrgChartStore } from "#/stores/org-chart-store";
 import { cn } from "#/utils/utils";
 import { AgentInspectorDrawer } from "./agent-inspector-drawer";
-import { BlackboardSync } from "./blackboard-sync";
+import { MergeConflicts } from "./org-merge";
 import { ChartToolbar } from "./chart-toolbar";
 import { EscalationsPanel } from "./escalations-panel";
 import { FocusedChart, fitFocusedChart } from "./focused-chart";
 import { OrgBreadcrumb } from "./org-breadcrumb";
 import { PauseButton, PausedBanner } from "./org-pause";
+import { OrgSync } from "./org-sync";
 import { OrgSettings } from "./org-settings";
 import { OrgTree } from "./org-tree";
 import { OwnershipMap } from "./ownership-map";
@@ -210,7 +211,7 @@ export function OrgChartView({ nodeId }: OrgChartViewProps) {
               </span>
             ) : null}
             <TeamSearch />
-            {org.data && !org.data.fixture ? <BlackboardSync /> : null}
+            {org.data && !org.data.fixture ? <OrgSync /> : null}
             <ChartToolbar />
             {org.data && !org.data.fixture && org.data.paused === null ? (
               <PauseButton />
@@ -221,6 +222,7 @@ export function OrgChartView({ nodeId }: OrgChartViewProps) {
         {org.data?.paused !== undefined ? (
           <PausedBanner paused={org.data.paused} />
         ) : null}
+        {org.data?.merging ? <MergeConflicts /> : null}
         <EscalationsPanel escalations={escalations} />
         <section
           ref={setFrame}

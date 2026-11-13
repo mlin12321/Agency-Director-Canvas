@@ -1,7 +1,6 @@
 import { getEffectiveLocalBackend } from "../backend-registry/active-store";
 import {
   DIRECTOR_BASE_PATH,
-  type BlackboardSync,
   type BoundaryMemory,
   type DirectorSettings,
   type DirectorSettingsState,
@@ -9,11 +8,14 @@ import {
   type NodeId,
   type NodeOwnership,
   type OrgEvent,
+  type OrgMerge,
   type OrgNode,
   type OrgSummary,
+  type OrgSync,
   type Recovery,
   type RoutedMessage,
   type RouteMessageRequest,
+  type Side,
   type TeamMatch,
 } from "./types";
 
@@ -122,11 +124,31 @@ export const DirectorClient = {
   },
 
   /**
-   * Take in the blackboard a remote of the repository has. Nothing leaves
-   * this machine.
+   * Take in the org a remote of the repository has, as a merge: the tree,
+   * the blackboard and the branches of the teams' work.
    */
-  pullBlackboard(remote = "origin") {
-    return postJson<BlackboardSync>(`${ORG_PATH}/blackboard/pull`, { remote });
+  pullOrg(remote = "origin") {
+    return postJson<OrgSync>(`${ORG_PATH}/pull`, { remote });
+  },
+
+  /** Give a remote the org, the blackboard and the teams' branches. */
+  pushOrg(remote = "origin") {
+    return postJson<OrgSync>(`${ORG_PATH}/push`, { remote });
+  },
+
+  /** The merge that waits for choices; `null` when none does. */
+  getMerge() {
+    return requestJson<OrgMerge | null>(`${ORG_PATH}/merge`);
+  },
+
+  /** Choose a side for conflicts; the merge is finished once all have one. */
+  resolveMerge(choices: Record<string, Side>) {
+    return postJson<OrgSync>(`${ORG_PATH}/merge/resolve`, { choices });
+  },
+
+  /** Abandon the merge that waits; the org stays as it was. */
+  abortMerge() {
+    return postJson<OrgSync>(`${ORG_PATH}/merge/abort`, {});
   },
 
   /** The limits on new teams, beside how large the org is now. */
@@ -168,14 +190,6 @@ export const DirectorClient = {
   searchTeams(query: string, limit = 8) {
     const params = new URLSearchParams({ q: query, limit: String(limit) });
     return requestJson<TeamMatch[]>(`${ORG_PATH}/search?${params}`);
-  },
-
-  /**
-   * Give a remote of the repository the local blackboard, after taking in
-   * what the remote has that it lacks.
-   */
-  pushBlackboard(remote = "origin") {
-    return postJson<BlackboardSync>(`${ORG_PATH}/blackboard/push`, { remote });
   },
 };
 
