@@ -60,6 +60,7 @@ import {
 } from "./home-launcher-mode-toggle";
 import { OpenLauncherButton } from "./open-launcher-button";
 import { OpenWorkspaceDialog } from "./open-workspace-dialog";
+import { useOpenFolderRequestStore } from "#/stores/open-folder-request-store";
 import { OpenRepositoryDialog } from "./open-repository-dialog";
 import { HomeGitControlBarPreview } from "./home-git-control-bar-preview";
 
@@ -87,6 +88,10 @@ export function HomeChatLauncher() {
   const isLocal = backend.kind === "local";
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  // Another page sent the human here to choose a folder.
+  useEffect(() => {
+    if (useOpenFolderRequestStore.getState().take()) setIsDialogOpen(true);
+  }, []);
   const [pendingWorkspace, setPendingWorkspace] =
     useState<LocalWorkspace | null>(null);
   const {

@@ -78,6 +78,7 @@ import {
 import { resolveTitleLlmProfile } from "#/utils/title-llm-profile";
 import { toAcpModelOptions } from "#/constants/acp-providers";
 import { isPlannerConversationOf } from "#/utils/plan-file";
+import { routeToOrg } from "#/api/director/route-to-org";
 import { buildAutomationSetupModeTags } from "#/utils/automation-draft-tags";
 import {
   AUTOMATION_SETUP_SYSTEM_SUFFIX,
@@ -742,17 +743,58 @@ class AgentServerConversationService {
     }
 
     const telemetryDistinctId = await getTelemetryDistinctId();
-    const data = await new ConversationClient(
-      getAgentServerClientOptions({ timeout: CREATE_CONVERSATION_TIMEOUT_MS }),
-    ).createConversation<DirectConversationInfo>({
+    const request = {
       ...payload,
       ...(conversationRuntime
         ? { conversation_runtime: conversationRuntime }
         : {}),
       ...(telemetryDistinctId ? { user_id: telemetryDistinctId } : {}),
-    });
+    };
+    // A plain first message in a folder belongs to the org of that folder:
+    // it starts the org, or goes to the team that owns the folder. Anything
+    // launched for a purpose of its own stays an ordinary conversation.
+    const firstMessage = initialUserMsg?.trim();
+    const routed =
+      firstMessage &&
+      !parentConversationId &&
+      !automationSetup &&
+      !inContainer &&
+      agentProfileKind !== "acp" &&
+      agentType !== "plan"
+        ? await routeToOrg(firstMessage, workingDir, request)
+        : null;
+    const startedAt = new Date().toISOString();
+    let data: Pick<DirectConversationInfo, "id" | "created_at" | "updated_at">;
+    if (!routed) {
+      data = await new ConversationClient(
+        getAgentServerClientOptions({
+          timeout: CREATE_CONVERSATION_TIMEOUT_MS,
+        }),
+      ).createConversation<DirectConversationInfo>(request);
+    } else {
+      // The org's root IC runs as the conversation that was asked for; a
+      // message to a running team opens that team's own conversation.
+      data = {
+        id: routed.started_org ? conversationId : routed.conversation_id,
+        created_at: startedAt,
+        updated_at: startedAt,
+      };
+    }
     const localBackend = getEffectiveLocalBackend();
     if (!localBackend) throw new NoBackendAvailableError();
+    if (routed && !routed.started_org) {
+      return {
+        id: data.id,
+        created_by_user_id: null,
+        status: "READY",
+        detail: null,
+        app_conversation_id: data.id,
+        agent_server_url: localBackend.host,
+        request: { plugins: null },
+        created_at: data.created_at,
+        updated_at: data.updated_at,
+      };
+    }
 
     // A Docker conversation is recorded even without a workspace: hooks and
     // restarts read its workspace_mode.

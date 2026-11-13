@@ -18,18 +18,18 @@ describe("fitFocusedChart", () => {
   });
 
   it("wraps the reports into rows when that makes the team larger", () => {
-    // One row of fifteen would be 0.42; three rows of five are 864 by 381.
-    const fit = fitFocusedChart(team(15), ROOMY);
+    // One row of fifteen would be 0.38; three rows of five are 864 by 381.
+    const fit = fitFocusedChart(team(15), { width: 1000, height: 500 });
 
     expect(fit.columns).toBe(5);
-    expect(fit.scale).toBeCloseTo(1100 / 864);
+    expect(fit.scale).toBeCloseTo(1000 / 864);
   });
 
-  it("enlarges a small team to twice its size and no further, in one row", () => {
+  it("enlarges a small team by a quarter and no further, in one row", () => {
     const vast = { width: 4000, height: 3000 };
 
-    expect(fitFocusedChart(team(0), vast)).toEqual({ columns: 1, scale: 2 });
-    expect(fitFocusedChart(team(3), vast)).toEqual({ columns: 3, scale: 2 });
+    expect(fitFocusedChart(team(0), vast)).toEqual({ columns: 1, scale: 1.25 });
+    expect(fitFocusedChart(team(3), vast)).toEqual({ columns: 3, scale: 1.25 });
   });
 
   it("shrinks a team that does not fit at its own size", () => {
