@@ -494,7 +494,11 @@ export type OrgEvent =
       focus_id: NodeId;
       nodes: OrgNode[];
       escalations: OpenEscalation[];
+      /** Missing from a server that does not say it on the stream. */
+      paused?: PauseReason | null;
+      merging?: boolean;
     }
+  | { type: "org_state"; paused: PauseReason | null; merging: boolean }
   | { type: "node_upsert"; node: OrgNode }
   | { type: "node_removed"; id: NodeId }
   | { type: "escalations"; escalations: OpenEscalation[] };

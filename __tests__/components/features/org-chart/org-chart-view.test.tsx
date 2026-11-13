@@ -90,7 +90,7 @@ const DOUBLE_CHARGE: Escalation = {
 
 /** A fake of the server's org store drives the stream with realistic events. */
 let store: OrgStore;
-let streams: Array<{ close: () => void }>;
+let streams: Array<{ close: () => void; send: (event: OrgEvent) => void }>;
 let streamRequests: Request[];
 
 function frame(event: OrgEvent) {
@@ -108,7 +108,7 @@ function streamHandler() {
       return HttpResponse.json({ detail: "Unknown node" }, { status: 404 });
     }
     let unsubscribe = () => {};
-    const handle = { close: () => {} };
+    const handle = { close: () => {}, send: (_: OrgEvent) => {} };
     const stream = new ReadableStream<Uint8Array>({
       start(controller) {
         controller.enqueue(frame(snapshot));
@@ -123,6 +123,7 @@ function streamHandler() {
           unsubscribe();
           controller.close();
         };
+        handle.send = (event) => controller.enqueue(frame(event));
         streams.push(handle);
       },
       cancel: () => unsubscribe(),
@@ -694,6 +695,37 @@ describe("OrgChartView", () => {
   });
 
   describe("live updates", () => {
+    it("shows a pause made elsewhere as soon as the stream says so", async () => {
+      server.use(
+        http.get("*/api/director/org", () =>
+          HttpResponse.json({
+            root_id: "root",
+            node_count: 5,
+            repo_path: "/work/shop",
+            is_git_repository: true,
+            fixture: false,
+            paused: null,
+            merging: false,
+          } satisfies OrgSummary),
+        ),
+        http.get("*/api/director/org/recovery", () =>
+          HttpResponse.json({ paused: "human", items: [], messages_held: 0 }),
+        ),
+      );
+      renderWithProviders(<OrgChartView nodeId={null} />);
+      await findCard("root");
+      await screen.findByRole("button", { name: "ORG_CHART$PAUSE" });
+      expect(screen.queryByTestId("org-paused")).toBeNull();
+
+      streams[0].send({ type: "org_state", paused: "human", merging: false });
+      expect(await screen.findByTestId("org-paused")).toBeInTheDocument();
+
+      streams[0].send({ type: "org_state", paused: null, merging: false });
+      await waitFor(() =>
+        expect(screen.queryByTestId("org-paused")).toBeNull(),
+      );
+    });
+
     it("adds and removes cards as teams are spawned and pruned", async () => {
       renderWithProviders(<OrgChartView nodeId={null} />);
       await findCard("root");
