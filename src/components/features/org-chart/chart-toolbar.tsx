@@ -14,6 +14,7 @@ const BUTTON =
 const VIEWS: Array<{ mode: OrgChartViewMode; label: I18nKey }> = [
   { mode: "focused", label: I18nKey.ORG_CHART$VIEW_FOCUSED },
   { mode: "full", label: I18nKey.ORG_CHART$VIEW_FULL },
+  { mode: "by_state", label: I18nKey.ORG_CHART$VIEW_BY_STATE },
 ];
 
 /** Which chart is drawn, and how large. Both are remembered. */
@@ -21,6 +22,8 @@ export function ChartToolbar() {
   const { t } = useTranslation("openhands");
   const { view, zoom, setView, zoomIn, zoomOut, resetZoom } =
     useOrgChartStore();
+  // The cards of the board keep their size; only the charts zoom.
+  const zooms = view !== "by_state";
 
   return (
     <div className="flex items-center gap-3">
@@ -54,7 +57,7 @@ export function ChartToolbar() {
         <button
           type="button"
           aria-label={t(I18nKey.ORG_CHART$ZOOM_OUT)}
-          disabled={zoom <= ORG_CHART_ZOOM.min}
+          disabled={!zooms || zoom <= ORG_CHART_ZOOM.min}
           onClick={zoomOut}
           className={BUTTON}
         >
@@ -63,6 +66,7 @@ export function ChartToolbar() {
         <button
           type="button"
           aria-label={t(I18nKey.ORG_CHART$ZOOM_RESET)}
+          disabled={!zooms}
           onClick={resetZoom}
           className={cn(BUTTON, "w-12 tabular-nums")}
         >
@@ -71,7 +75,7 @@ export function ChartToolbar() {
         <button
           type="button"
           aria-label={t(I18nKey.ORG_CHART$ZOOM_IN)}
-          disabled={zoom >= ORG_CHART_ZOOM.max}
+          disabled={!zooms || zoom >= ORG_CHART_ZOOM.max}
           onClick={zoomIn}
           className={BUTTON}
         >
