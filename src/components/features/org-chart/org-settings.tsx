@@ -37,6 +37,8 @@ function SettingsForm({
   const [depth, setDepth] = React.useState(String(state.max_depth));
   // Absent on a server that cannot give a sub-team another agent.
   const [allowed, setAllowed] = React.useState(state.allowed_profiles);
+  // Absent on a server that cannot pause an org.
+  const [resumes, setResumes] = React.useState(state.resume_on_start);
   const profiles = useAgentProfiles({ enabled: allowed !== undefined }).data;
   // A profile that was allowed and has since been deleted can still be
   // unticked.
@@ -52,6 +54,7 @@ function SettingsForm({
         max_agents: Number(agents),
         max_depth: Number(depth),
         ...(allowed ? { allowed_profiles: allowed } : {}),
+        ...(resumes === undefined ? {} : { resume_on_start: resumes }),
       }),
     onSuccess: (saved) => {
       queryClient.setQueryData(DIRECTOR_QUERY_KEYS.settings(backend.id), saved);
@@ -147,6 +150,22 @@ function SettingsForm({
               </span>
             </fieldset>
           ) : null}
+          {resumes === undefined ? null : (
+            <label className="flex flex-col gap-2 text-sm">
+              <span className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={resumes}
+                  disabled={save.isPending}
+                  onChange={(event) => setResumes(event.target.checked)}
+                />
+                {t(I18nKey.ORG_CHART$SETTINGS_RESUME_ON_START)}
+              </span>
+              <span className="text-xs text-muted">
+                {t(I18nKey.ORG_CHART$SETTINGS_RESUME_ON_START_HELP)}
+              </span>
+            </label>
+          )}
           {state.max_concurrent_runs !== null ? (
             <p className="text-xs text-muted">
               {t(I18nKey.ORG_CHART$SETTINGS_RUNS, {
@@ -168,6 +187,7 @@ function SettingsForm({
                 setAgents(String(DEFAULTS.max_agents));
                 setDepth(String(DEFAULTS.max_depth));
                 if (allowed) setAllowed(DEFAULTS.allowed_profiles);
+                if (resumes !== undefined) setResumes(false);
               }}
             >
               {t(I18nKey.ORG_CHART$SETTINGS_RESET)}
@@ -233,6 +253,7 @@ export function OrgSettings() {
             settings.data.max_agents,
             settings.data.max_depth,
             ...(settings.data.allowed_profiles ?? []),
+            settings.data.resume_on_start,
           ].join(":")}
           state={settings.data}
           onClose={() => setIsOpen(false)}

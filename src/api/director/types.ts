@@ -212,6 +212,12 @@ export interface DirectorSettings {
    * Absent on a server that has no such setting.
    */
   allowed_profiles?: string[];
+  /**
+   * Whether an org that was stopped in the middle of its work takes it up
+   * again as soon as the server is back. Absent on a server that cannot
+   * pause an org.
+   */
+  resume_on_start?: boolean;
 }
 
 /** The settings, beside what the org has now. */
@@ -254,6 +260,43 @@ export interface OrgSummary {
   fixture: boolean;
   /** Absent on a server that does not hold teams to their boundaries. */
   boundary_enforcement?: BoundaryEnforcement;
+  /**
+   * Why the org's agents are held and its steps and messages wait; `null`
+   * when the org runs. Absent on a server that cannot pause an org.
+   */
+  paused?: PauseReason | null;
+}
+
+/**
+ * Why an org is paused. `shutdown`: the server was stopped while the org
+ * worked. `crash`: the server ended without stopping the org first.
+ */
+export type PauseReason = "human" | "shutdown" | "crash";
+
+/**
+ * `dropped`: run state that no longer fits the org was put aside.
+ * `cannot_resume`: a team that cannot be taken up as it is. The others say
+ * what resuming does.
+ */
+export type RecoveryKind =
+  "run_again" | "start" | "continue" | "message" | "dropped" | "cannot_resume";
+
+/** One thing a paused org takes up again, or cannot. */
+export interface RecoveryItem {
+  /** The team it is about; `""` for the whole org. */
+  node_id: NodeId;
+  title: string;
+  kind: RecoveryKind;
+  /** What it is, in the server's words. */
+  detail: string;
+}
+
+/** What a paused org does when it is resumed. */
+export interface Recovery {
+  paused: PauseReason | null;
+  items: RecoveryItem[];
+  /** How many messages to agents wait for the org to resume. */
+  messages_held: number;
 }
 
 /**

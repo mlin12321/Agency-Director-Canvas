@@ -11,6 +11,7 @@ import {
   type OrgEvent,
   type OrgNode,
   type OrgSummary,
+  type Recovery,
   type RoutedMessage,
   type RouteMessageRequest,
   type TeamMatch,
@@ -143,6 +144,24 @@ export const DirectorClient = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(settings),
     });
+  },
+
+  /**
+   * Hold the org: its agents stop after the step they are in, and messages
+   * to them wait.
+   */
+  pauseOrg() {
+    return postJson<Recovery>(`${ORG_PATH}/pause`, {});
+  },
+
+  /** Take a paused org up again; answers with what was put aside as stale. */
+  resumeOrg() {
+    return postJson<Recovery>(`${ORG_PATH}/resume`, {});
+  },
+
+  /** What resuming a paused org does, team by team. */
+  getRecovery() {
+    return requestJson<Recovery>(`${ORG_PATH}/recovery`);
   },
 
   /** Teams whose title or directory has every word of `query`. */
