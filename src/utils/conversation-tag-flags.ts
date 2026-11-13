@@ -16,6 +16,20 @@
 export const PINNED_CONVERSATION_TAG_KEY = "pinned";
 export const ARCHIVED_CONVERSATION_TAG_KEY = "archived";
 
+/**
+ * Set by the Agent Server's director on the conversations it starts for an
+ * org's agents (every Manager, and the IC of every sub-team). The root
+ * team's IC is the conversation the human started and does not carry it.
+ */
+export const STARTED_BY_TAG_KEY = "startedby";
+
+/** Whether an agent's runtime, not the human, started the conversation. */
+export function isAgentStartedConversation(
+  tags: Record<string, string> | null | undefined,
+): boolean {
+  return Boolean(tags?.[STARTED_BY_TAG_KEY]);
+}
+
 /** Value stamped for an enabled flag. Any other value counts as disabled. */
 export const CONVERSATION_TAG_FLAG_VALUE = "true";
 

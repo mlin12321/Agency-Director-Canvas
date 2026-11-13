@@ -9,16 +9,13 @@ import type {
   NodeStatus,
   OrgEvent,
   OrgSummary,
-  RoutedMessage,
   SplitProposal,
 } from "#/api/director/types";
-import { buildStartConversationRequestWithEncryptedSettings } from "#/api/agent-server-adapter";
-import SettingsService from "#/api/settings-service/settings-service.api";
-import { resolveConversationLaunch } from "#/hooks/mutation/resolve-conversation-launch";
 import { subscribeOrgTree } from "#/api/director/director-client";
 import * as activeStore from "#/api/backend-registry/active-store";
 import { OrgChartView } from "#/components/features/org-chart/org-chart-view";
 import { server } from "#/mocks/node";
+import { useOpenFolderRequestStore } from "#/stores/open-folder-request-store";
 import { useOrgChartStore } from "#/stores/org-chart-store";
 import { renderWithProviders } from "test-utils";
 import { OrgStore, type OrgNodeInput } from "./fake-org-store.mjs";
@@ -29,17 +26,6 @@ vi.mock("#/components/features/org-chart/agent-conversation", () => ({
   AgentConversation: ({ conversationId }: { conversationId: string }) => (
     <div data-testid="conversation-view">{conversationId}</div>
   ),
-}));
-
-// Which profile and LLM a launch uses, and the request built from them, are
-// the conversation launch's business; an org only passes them on.
-vi.mock("#/hooks/mutation/resolve-conversation-launch", () => ({
-  resolveConversationLaunch: vi.fn(),
-  assertLaunchLlmReady: vi.fn(),
-}));
-vi.mock("#/api/agent-server-adapter", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("#/api/agent-server-adapter")>()),
-  buildStartConversationRequestWithEncryptedSettings: vi.fn(),
 }));
 
 const POD: AgentRef[] = [
@@ -1093,266 +1079,75 @@ describe("OrgChartView", () => {
 
     function withoutOrg(summary: OrgSummary = SUMMARY) {
       store = new OrgStore();
-      const sent: unknown[] = [];
       server.use(
         streamHandler(),
         http.get("*/api/director/org", () => HttpResponse.json(summary)),
-        http.post("*/api/director/org/messages", async ({ request }) => {
-          sent.push(await request.json());
-          store.upsert({
-            ...input("root", null, "working", ""),
-            agents: [
-              { role: "ic", conversation_id: "conv-ic", status: "working" },
-            ],
-          });
-          const routed: RoutedMessage = {
-            node_id: "root",
-            conversation_id: "conv-ic",
-            started_org: true,
-          };
-          return HttpResponse.json(routed);
-        }),
       );
-      return sent;
     }
 
-    async function fillAndSubmit(user: ReturnType<typeof userEvent.setup>) {
-      const form = await screen.findByRole("form", {
-        name: "ORG_CHART$START_TITLE",
-      });
-      const submit = within(form).getByRole("button", {
-        name: "ORG_CHART$START_SUBMIT",
-      });
-      expect(submit).toBeDisabled();
-      expect(within(form).getAllByRole("textbox")).toHaveLength(1);
-      await user.type(
-        within(form).getByLabelText("ORG_CHART$START_TASK_LABEL"),
-        "Build the checkout",
-      );
-      await user.click(submit);
-    }
-
-    beforeEach(() => {
-      vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
-        {} as Awaited<ReturnType<typeof SettingsService.getSettings>>,
-      );
-      vi.mocked(resolveConversationLaunch).mockResolvedValue({
-        agentProfileId: "profile-1",
-        agentProfileKind: "openhands",
-      });
-      vi.mocked(
-        buildStartConversationRequestWithEncryptedSettings,
-      ).mockImplementation(async (options) => ({
-        conversation_id: options.conversationId,
-        workspace: { working_dir: options.workingDir },
-        worktree: options.worktree,
-      }));
-    });
-
-    it("starts one from the first message alone, as a conversation in the director's repository, and opens the team that took it", async () => {
-      const started = withoutOrg();
-      blackboardHandlers();
-      const user = userEvent.setup();
-      renderWithProviders(<OrgChartView nodeId={null} />);
-
-      await fillAndSubmit(user);
-
-      // Well inside the stream's first retry delay.
-      expect(await findCard("root", 800)).toBeInTheDocument();
-      expect(await screen.findByTestId("conversation-view")).toHaveTextContent(
-        "conv-ic",
-      );
-      expect(started).toEqual([
-        {
-          text: "Build the checkout",
-          conversation: expect.objectContaining({
-            conversation_id: expect.any(String),
-            workspace: { working_dir: "/work/shop" },
-            worktree: true,
-          }),
-        },
-      ]);
-    });
-
-    it("refuses an ACP agent profile without asking the server", async () => {
-      const started = withoutOrg();
-      vi.mocked(resolveConversationLaunch).mockResolvedValue({
-        agentProfileId: "profile-acp",
-        agentProfileKind: "acp",
-      });
-      const user = userEvent.setup();
-      renderWithProviders(<OrgChartView nodeId={null} />);
-
-      await fillAndSubmit(user);
-
-      expect(await screen.findByRole("alert")).toHaveTextContent(
-        "ORG_CHART$START_ACP_UNSUPPORTED",
-      );
-      expect(started).toEqual([]);
-    });
-
-    it("shows why the server refused", async () => {
+    it("says a conversation's first message starts one, and leads to where conversations start", async () => {
       withoutOrg();
-      server.use(
-        http.post("*/api/director/org/messages", () =>
-          HttpResponse.json(
-            { detail: "The server is at its run limit" },
-            { status: 429 },
-          ),
-        ),
-      );
-      const user = userEvent.setup();
       renderWithProviders(<OrgChartView nodeId={null} />);
-
-      await fillAndSubmit(user);
-
-      expect(await screen.findByRole("alert")).toHaveTextContent(
-        "ORG_CHART$START_FAILED",
-      );
-    });
-
-    it("says an org needs a git repository when the director's directory is not one", async () => {
-      withoutOrg({ ...SUMMARY, is_git_repository: false });
-      renderWithProviders(<OrgChartView nodeId={null} />);
-
-      expect(await screen.findByRole("alert")).toHaveTextContent(
-        "ORG_CHART$START_NEEDS_GIT",
-      );
-      expect(screen.queryByRole("form")).toBeNull();
-    });
-  });
-
-  describe("a message to the org", () => {
-    function routing(to: string) {
-      const sent: unknown[] = [];
-      server.use(
-        http.post("*/api/director/org/messages", async ({ request }) => {
-          sent.push(await request.json());
-          const routed: RoutedMessage = {
-            node_id: to,
-            conversation_id: "conv-ic",
-            started_org: false,
-          };
-          return HttpResponse.json(routed);
-        }),
-      );
-      return sent;
-    }
-
-    function form() {
-      return screen.getByRole("form", { name: "ORG_CHART$ASK_LABEL" });
-    }
-
-    it("starts out from the folder of the team the page is on, and opens the team that took it", async () => {
-      const sent = routing("auth");
-      blackboardHandlers();
-      const navigate = vi.fn();
-      const user = userEvent.setup();
-      renderWithProviders(<OrgChartView nodeId="auth" />, {
-        navigation: { navigate },
-      });
-      await findCard("auth");
-
-      const folder = within(form()).getByLabelText("ORG_CHART$ASK_PATH_LABEL");
-      expect(folder).toHaveValue("services/auth");
-      const message = within(form()).getByRole("textbox", {
-        name: "ORG_CHART$ASK_LABEL",
-      });
-      await user.type(message, "Add passkeys");
-      await user.click(
-        within(form()).getByRole("button", { name: "ORG_CHART$ASK_SEND" }),
-      );
 
       expect(
-        await screen.findByRole("dialog", { name: "auth team" }),
+        await screen.findByRole("heading", { name: "ORG_CHART$START_TITLE" }),
       ).toBeInTheDocument();
-      expect(sent).toEqual([{ text: "Add passkeys", path: "services/auth" }]);
-      expect(message).toHaveValue("");
-      expect(within(form()).getByRole("status")).toHaveTextContent(
-        "ORG_CHART$ASK_SENT",
-      );
-      // The page is already on the team that took it.
-      expect(navigate).not.toHaveBeenCalled();
+      expect(screen.getByText("ORG_CHART$START_BODY")).toBeInTheDocument();
+      expect(
+        screen.getByRole("link", { name: "ORG_CHART$START_SUBMIT" }),
+      ).toHaveAttribute("href", "/conversations");
+      // Nothing is typed to agents on this page.
+      expect(screen.queryByRole("textbox")).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: "ORG_CHART$START_OPEN_FOLDER" }),
+      ).toBeNull();
     });
 
-    it("starts out from the folder the server was started for when the team on the page owns it", async () => {
-      const summary: OrgSummary = {
-        root_id: "root",
-        node_count: 5,
-        repo_path: "/work/shop",
-        directory: "services/auth/vendor/tokens",
-        is_git_repository: true,
-        fixture: false,
-      };
-      server.use(
-        http.get("*/api/director/org", () => HttpResponse.json(summary)),
-      );
-      const { unmount } = renderWithProviders(<OrgChartView nodeId="auth" />);
-      await findCard("auth");
-
-      await waitFor(() =>
-        expect(
-          within(form()).getByLabelText("ORG_CHART$ASK_PATH_LABEL"),
-        ).toHaveValue("services/auth/vendor/tokens"),
-      );
-
-      // Another team's page keeps to that team's folder.
-      unmount();
-      renderWithProviders(<OrgChartView nodeId="billing" />);
-      await findCard("billing");
-      await waitFor(() =>
-        expect(
-          within(form()).getByLabelText("ORG_CHART$ASK_PATH_LABEL"),
-        ).toHaveValue("services/billing"),
-      );
-    });
-
-    it("moves the page to the team that took it when that is another one", async () => {
-      const sent = routing("oauth");
+    it("leads to choosing a folder when the server's own is not in a git repository", async () => {
+      withoutOrg({ ...SUMMARY, is_git_repository: false });
       const navigate = vi.fn();
       const user = userEvent.setup();
       renderWithProviders(<OrgChartView nodeId={null} />, {
         navigation: { navigate },
       });
-      await findCard("root");
 
-      const folder = within(form()).getByLabelText("ORG_CHART$ASK_PATH_LABEL");
-      expect(folder).toHaveValue("");
-      await user.type(folder, "services/auth/oauth/providers");
-      await user.type(
-        within(form()).getByRole("textbox", { name: "ORG_CHART$ASK_LABEL" }),
-        "Add GitHub{Enter}",
+      expect(
+        await screen.findByText("ORG_CHART$START_NEEDS_GIT"),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("link", { name: "ORG_CHART$START_SUBMIT" }),
+      ).toBeNull();
+      await user.click(
+        screen.getByRole("button", { name: "ORG_CHART$START_OPEN_FOLDER" }),
       );
 
-      await waitFor(() => expect(navigate).toHaveBeenCalledWith("/org/oauth"));
-      expect(sent).toEqual([
-        { text: "Add GitHub", path: "services/auth/oauth/providers" },
-      ]);
+      expect(navigate).toHaveBeenCalledWith("/conversations");
+      // Home offers its folder chooser once.
+      expect(useOpenFolderRequestStore.getState().take()).toBe(true);
+      expect(useOpenFolderRequestStore.getState().take()).toBe(false);
     });
+  });
 
-    it("keeps the message and says why when the server refuses it", async () => {
+  describe("giving an org work", () => {
+    it("says to start a conversation in a folder of the org's repository", async () => {
       server.use(
-        http.post("*/api/director/org/messages", () =>
-          HttpResponse.json(
-            { detail: "No team of the org can take the message" },
-            { status: 409 },
-          ),
+        http.get("*/api/director/org", () =>
+          HttpResponse.json({
+            root_id: "root",
+            node_count: 5,
+            repo_path: "/work/shop",
+            is_git_repository: true,
+            fixture: false,
+          } satisfies OrgSummary),
         ),
       );
-      const user = userEvent.setup();
       renderWithProviders(<OrgChartView nodeId={null} />);
       await findCard("root");
 
-      const message = within(form()).getByRole("textbox", {
-        name: "ORG_CHART$ASK_LABEL",
-      });
-      await user.type(message, "Add GitHub{Enter}");
-
-      expect(await within(form()).findByRole("alert")).toHaveTextContent(
-        "ORG_CHART$ASK_FAILED",
-      );
-      expect(message).toHaveValue("Add GitHub");
-      expect(screen.queryByRole("dialog")).toBeNull();
+      const hint = await screen.findByText(/ORG_CHART\$TALK_HINT/);
+      expect(
+        within(hint).getByRole("link", { name: "ORG_CHART$START_SUBMIT" }),
+      ).toHaveAttribute("href", "/conversations");
     });
   });
 

@@ -30,7 +30,7 @@ const DOWN_MARKER = 24;
 /** Below this the names stop being readable; the chart scrolls instead. */
 const MIN_SCALE = 0.4;
 /** A small team is enlarged up to this, not until it fills the space. */
-const MAX_SCALE = 2;
+const MAX_SCALE = 1.25;
 
 interface FocusedChartFit {
   columns: number;

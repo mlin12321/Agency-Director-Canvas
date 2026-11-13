@@ -211,6 +211,14 @@ export function AdvancedConversationOptionsModal({
               testId="toggle-show-archived"
               onClick={preferences.toggleShowArchivedConversations}
             />
+            <MenuRow
+              icon={Bot}
+              label={t(I18nKey.CONVERSATION_PANEL$SHOW_AGENT_STARTED)}
+              selected={preferences.showAgentStartedConversations}
+              variant="toggle"
+              testId="toggle-show-agent-started"
+              onClick={preferences.toggleShowAgentStartedConversations}
+            />
             <HideOlderConversationsRow />
             <MenuSeparator />
             <MenuHeading>

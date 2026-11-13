@@ -1,4 +1,5 @@
 import { useConversationLaunchStore } from "#/stores/conversation-launch-store";
+import { useOpenFolderRequestStore } from "#/stores/open-folder-request-store";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { readFileSync } from "node:fs";
@@ -617,6 +618,17 @@ describe("HomeChatLauncher", () => {
     // The send is disabled, so the agent can't be handed a request it can't run.
     expect(screen.getByTestId("stub-chat-submit")).toBeDisabled();
     expect(createSpy).not.toHaveBeenCalled();
+  });
+
+  it("offers the folder chooser at once when another page asked for a folder", async () => {
+    useOpenFolderRequestStore.getState().request();
+
+    renderLauncher();
+
+    expect(
+      await screen.findByTestId("stub-workspace-dialog-confirm"),
+    ).toBeInTheDocument();
+    expect(useOpenFolderRequestStore.getState().requested).toBe(false);
   });
 
   it("passes the picked workspace path as working_dir on a local backend", async () => {
@@ -1451,7 +1463,9 @@ describe("HomeChatLauncher", () => {
     ).toBe(true);
 
     // Return to the composer from the failed-launch view and retry.
-    await user.click(await screen.findByRole("button", { name: "BUTTON$EDIT" }));
+    await user.click(
+      await screen.findByRole("button", { name: "BUTTON$EDIT" }),
+    );
     await user.click(screen.getByTestId("stub-chat-submit"));
     await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(2));
     expect(createSpy.mock.lastCall?.[0]).toMatchObject({

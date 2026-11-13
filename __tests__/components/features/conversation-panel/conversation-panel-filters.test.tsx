@@ -69,6 +69,49 @@ describe("ConversationPanel filters and pagination", () => {
     expect(screen.queryByText("Manual 1")).not.toBeInTheDocument();
   });
 
+  it("lists the conversations an org's director started only when asked to", async () => {
+    vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    ).mockResolvedValue({
+      items: [
+        createMockConversation({ id: "1", title: "Mine" }),
+        // The root team's IC is the conversation the human started.
+        createMockConversation({ id: "2", title: "Shop Checkout (IC)" }),
+        createMockConversation({
+          id: "3",
+          title: "Shop Checkout (Manager)",
+          tags: { startedby: "director" },
+        }),
+        createMockConversation({
+          id: "4",
+          title: "API (IC)",
+          tags: { startedby: "director", workspace: "/work/shop" },
+        }),
+      ],
+      next_page_id: null,
+    });
+
+    renderConversationPanel();
+
+    expect(await screen.findAllByTestId("conversation-card")).toHaveLength(2);
+    expect(screen.getByText("Shop Checkout (IC)")).toBeInTheDocument();
+    expect(screen.queryByText("Shop Checkout (Manager)")).toBeNull();
+    expect(screen.queryByText("API (IC)")).toBeNull();
+    // The tag that marks them is not shown as a chip of its own.
+    expect(screen.queryByText(/startedby/)).toBeNull();
+
+    const user = userEvent.setup();
+    await openAdvancedOptions(user);
+    const toggle = screen.getByTestId("toggle-show-agent-started");
+    expect(toggle).toHaveAttribute("aria-checked", "false");
+    await user.click(toggle);
+
+    expect(await screen.findByText("API (IC)")).toBeInTheDocument();
+    expect(screen.getByText("Shop Checkout (Manager)")).toBeInTheDocument();
+    expect(screen.getAllByTestId("conversation-card")).toHaveLength(4);
+  });
+
   it("filters from the persistent filter bar and couples automation chips to the mode", async () => {
     // Arrange: one tagged manual conversation, one untagged, one automation
     // run (recognized by its automation tags).

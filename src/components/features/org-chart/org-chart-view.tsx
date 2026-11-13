@@ -2,10 +2,9 @@ import React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { DirectorClient } from "#/api/director/director-client";
-import type { NodeId, OrgNode, RoutedMessage } from "#/api/director/types";
+import type { NodeId, OrgNode } from "#/api/director/types";
 import { NavigationLink } from "#/components/shared/navigation-link";
-import { ORG_CHART_PATH, orgNodePath } from "#/constants/org-chart";
-import { useNavigation } from "#/context/navigation-context";
+import { ORG_CHART_PATH } from "#/constants/org-chart";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { DIRECTOR_QUERY_KEYS } from "#/hooks/query/query-keys";
 import { useOrgTree } from "#/hooks/use-org-tree";
@@ -13,13 +12,12 @@ import { I18nKey } from "#/i18n/declaration";
 import { useOrgChartStore } from "#/stores/org-chart-store";
 import { cn } from "#/utils/utils";
 import { AgentInspectorDrawer } from "./agent-inspector-drawer";
-import { AskOrgForm } from "./ask-org-form";
 import { ChartToolbar } from "./chart-toolbar";
 import { EscalationsPanel } from "./escalations-panel";
 import { FocusedChart, fitFocusedChart } from "./focused-chart";
 import { OrgBreadcrumb } from "./org-breadcrumb";
 import { OrgTree } from "./org-tree";
-import { StartOrgForm } from "./start-org-form";
+import { HOME_PATH, StartOrgNotice } from "./start-org-notice";
 
 interface OrgChartViewProps {
   /** The team the page is on; `null` is the root of the tree. */
@@ -68,7 +66,7 @@ export function OrgChartView({ nodeId }: OrgChartViewProps) {
   const zoom = useOrgChartStore((state) => state.zoom);
   const full = view === "full";
   // The whole org is one subscription whichever team the page is on.
-  const { status, focusId, nodes, escalations, reconnect } = useOrgTree(
+  const { status, focusId, nodes, escalations } = useOrgTree(
     full ? null : nodeId,
     full,
   );
@@ -85,7 +83,6 @@ export function OrgChartView({ nodeId }: OrgChartViewProps) {
   // Details belong to the team they were opened on.
   const [detailsId, setDetailsId] = React.useState<NodeId | null>(null);
   const closeDetails = React.useCallback(() => setDetailsId(null), []);
-  const { navigate } = useNavigation();
   // The room the chart has, less the space kept free around what is drawn.
   const [frame, setFrame] = React.useState<HTMLElement | null>(null);
   const [space, setSpace] = React.useState({ width: 0, height: 0 });
@@ -104,21 +101,8 @@ export function OrgChartView({ nodeId }: OrgChartViewProps) {
     observer.observe(frame);
     return () => observer.disconnect();
   }, [frame]);
-  const titleOf = React.useCallback(
-    (id: NodeId) => nodes.get(id)?.title ?? id,
-    [nodes],
-  );
-
   const top = focusId === null ? null : (nodes.get(focusId) ?? null);
   const current = full && nodeId !== null ? (nodes.get(nodeId) ?? null) : top;
-  // A message opens the team that took it, on its IC's conversation.
-  const openTeamOf = (routed: RoutedMessage) => {
-    setDetailsId(routed.node_id);
-    if (routed.started_org) reconnect();
-    else if (routed.node_id !== current?.id) {
-      navigate(orgNodePath(routed.node_id));
-    }
-  };
 
   // In the whole-org view an unknown team is one the tree does not hold.
   if (status === "not_found" || (top && !current)) {
@@ -138,7 +122,7 @@ export function OrgChartView({ nodeId }: OrgChartViewProps) {
     if (status === "unavailable" && org.data?.root_id === null) {
       return (
         <Notice title={t(I18nKey.ORG_CHART$START_TITLE)}>
-          <StartOrgForm org={org.data} onStarted={openTeamOf} />
+          <StartOrgNotice org={org.data} />
         </Notice>
       );
     }
@@ -225,13 +209,17 @@ export function OrgChartView({ nodeId }: OrgChartViewProps) {
             </div>
           </div>
         </section>
-        <AskOrgForm
-          key={current.id}
-          node={current}
-          serverFolder={org.data?.directory}
-          titleOf={titleOf}
-          onSent={openTeamOf}
-        />
+        {org.data ? (
+          <p className="text-xs text-muted">
+            {t(I18nKey.ORG_CHART$TALK_HINT, { path: org.data.repo_path })}{" "}
+            <NavigationLink
+              to={HOME_PATH}
+              className="text-link hover:underline"
+            >
+              {t(I18nKey.ORG_CHART$START_SUBMIT)}
+            </NavigationLink>
+          </p>
+        ) : null}
       </div>
       {detailsId === current.id ? (
         <AgentInspectorDrawer
