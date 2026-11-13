@@ -28,9 +28,10 @@ const MAIN_CLASS =
 
 /**
  * One team. Clicking it moves the page to that team; clicking the team the
- * page is already on opens its details.
+ * page is already on opens its details. A card is drawn again only when its
+ * own team changed, which keeps an org of hundreds cheap to update.
  */
-export function NodeCard({
+export const NodeCard = React.memo(function NodeCard({
   node,
   current,
   collides = false,
@@ -61,6 +62,10 @@ export function NodeCard({
     onScreen.current = true;
   }, [zoom]);
 
+  // A team whose IC already works says what it delivers, even while its
+  // Manager still waits to start.
+  const waiting = node.waiting_to_start === true && node.status !== "working";
+
   const body = (
     <>
       <span className="flex w-full items-center gap-1.5">
@@ -90,7 +95,12 @@ export function NodeCard({
           </span>
         ) : null}
       </span>
-      {node.headline ? (
+      {waiting ? (
+        <span className="w-full truncate text-[11px] text-text-secondary">
+          {t(I18nKey.ORG_CHART$WAITING_TO_START)}
+        </span>
+      ) : null}
+      {node.headline && !waiting ? (
         <span className="w-full truncate text-[11px] text-text-secondary">
           {node.headline}
         </span>
@@ -138,4 +148,4 @@ export function NodeCard({
       </Tooltip>
     </div>
   );
-}
+});

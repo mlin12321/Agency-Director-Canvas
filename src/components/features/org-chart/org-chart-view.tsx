@@ -19,9 +19,11 @@ import { ChartToolbar } from "./chart-toolbar";
 import { EscalationsPanel } from "./escalations-panel";
 import { FocusedChart, fitFocusedChart } from "./focused-chart";
 import { OrgBreadcrumb } from "./org-breadcrumb";
+import { OrgSettings } from "./org-settings";
 import { OrgTree } from "./org-tree";
 import { OwnershipMap } from "./ownership-map";
 import { HOME_PATH, StartOrgNotice } from "./start-org-notice";
+import { TeamSearch } from "./team-search";
 
 interface OrgChartViewProps {
   /** The team the page is on; `null` is the root of the tree. */
@@ -109,6 +111,13 @@ export function OrgChartView({ nodeId }: OrgChartViewProps) {
   }, [frame]);
   const top = focusId === null ? null : (nodes.get(focusId) ?? null);
   const current = full && nodeId !== null ? (nodes.get(nodeId) ?? null) : top;
+  // The same function while the page stays on a team, so that cards are not
+  // drawn again for it.
+  const currentId = current?.id ?? null;
+  const openDetails = React.useCallback(
+    () => setDetailsId(currentId),
+    [currentId],
+  );
   // Alt+ArrowUp goes to the team above, which the chart does not draw.
   const { navigate } = useNavigation();
   const parentId = current?.parent_id ?? null;
@@ -169,7 +178,6 @@ export function OrgChartView({ nodeId }: OrgChartViewProps) {
 
   const ancestors = ancestorsOf(current, nodes);
   const stale = status === "reconnecting" || status === "unavailable";
-  const openDetails = () => setDetailsId(current.id);
   const reports = current.child_ids.flatMap((id) => nodes.get(id) ?? []);
   // One team is zoomed to be as large as fits. The whole org is not fitted:
   // it scrolls.
@@ -195,8 +203,10 @@ export function OrgChartView({ nodeId }: OrgChartViewProps) {
                 {t(I18nKey.ORG_CHART$RECONNECTING)}
               </span>
             ) : null}
+            <TeamSearch />
             {org.data && !org.data.fixture ? <BlackboardSync /> : null}
             <ChartToolbar />
+            {org.data && !org.data.fixture ? <OrgSettings /> : null}
           </div>
         </div>
         <EscalationsPanel escalations={escalations} />

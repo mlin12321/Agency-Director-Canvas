@@ -14,6 +14,7 @@ import {
   type Review,
   type RoutedMessage,
   type RouteMessageRequest,
+  type TeamMatch,
 } from "#/api/director/types";
 
 /**
@@ -325,6 +326,24 @@ export const DIRECTOR_HANDLERS = [
       fixture: true,
       boundary_enforcement: "sandbox",
     };
+    return HttpResponse.json(body);
+  }),
+
+  http.get(`${BASE}/org/search`, ({ request }) => {
+    const params = new URL(request.url).searchParams;
+    const words = (params.get("q") ?? "").toLowerCase().split(/\s+/);
+    const limit = Number(params.get("limit") ?? 8);
+    const body: TeamMatch[] = [...tree.values()]
+      .filter((node) => {
+        const text = `${node.title} ${node.boundary.path}`.toLowerCase();
+        return words.every((word) => text.includes(word));
+      })
+      .slice(0, limit)
+      .map((node) => ({
+        id: node.id,
+        title: node.title,
+        path: node.boundary.path,
+      }));
     return HttpResponse.json(body);
   }),
 

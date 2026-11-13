@@ -157,12 +157,47 @@ export interface OrgNode {
    */
   review?: Review | null;
   /**
+   * An agent of the team could not be started yet because the server runs
+   * as many conversations as it may. Absent on a server that does not say.
+   */
+  waiting_to_start?: boolean;
+  /**
    * Status of every node below this one, so a parent can summarize its whole
    * subtree without the client loading it.
    */
   descendant_counts: StatusCounts;
   /** Escalations from this node or below that wait on the human. */
   escalation_count: number;
+}
+
+/**
+ * Limits on the teams an org may still add. They are checked when a team
+ * splits; teams that exist are never removed for exceeding one.
+ */
+export interface DirectorSettings {
+  /** The most agents a team may have together with every team below it. */
+  max_agents: number;
+  /** The most levels of teams; the root team is level 1. */
+  max_depth: number;
+}
+
+/** The settings, beside what the org has now. */
+export interface DirectorSettingsState extends DirectorSettings {
+  agents: number;
+  depth: number;
+  /**
+   * How many conversations the server runs at once; teams beyond that wait
+   * to start. `null` when the director was not told.
+   */
+  max_concurrent_runs: number | null;
+}
+
+/** A team found by its title or its directory. */
+export interface TeamMatch {
+  id: NodeId;
+  title: string;
+  /** The directory the team owns; `""` at the root. */
+  path: string;
 }
 
 /** Whether the director has an org, and where it would keep one. */

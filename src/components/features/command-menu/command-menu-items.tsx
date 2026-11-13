@@ -46,7 +46,8 @@ export const COMMAND_MENU_ROUTE = {
   secretsSettings: "/settings/secrets",
 } as const;
 
-export type CommandMenuGroupId = "navigation" | "settings" | "actions";
+export type CommandMenuGroupId =
+  "navigation" | "settings" | "actions" | "teams";
 export type CommandMenuItemId =
   | "new-chat"
   | "customize"
@@ -62,7 +63,9 @@ export type CommandMenuItemId =
   | "runtime-settings"
   | "app-settings"
   | "secrets-settings"
-  | "toggle-sidebar";
+  | "toggle-sidebar"
+  // A team of the org, found by what was typed.
+  | `team-${string}`;
 
 export interface CommandMenuItemDefinition {
   id: CommandMenuItemId;
@@ -107,12 +110,14 @@ export const COMMAND_MENU_GROUP_LABELS: Record<CommandMenuGroupId, I18nKey> = {
   navigation: I18nKey.COMMAND_MENU$GROUP_NAVIGATION,
   settings: I18nKey.COMMAND_MENU$GROUP_SETTINGS,
   actions: I18nKey.COMMAND_MENU$GROUP_ACTIONS,
+  teams: I18nKey.COMMAND_MENU$GROUP_TEAMS,
 };
 
 export const COMMAND_MENU_GROUP_ORDER: CommandMenuGroupId[] = [
   "navigation",
   "settings",
   "actions",
+  "teams",
 ];
 
 export const createCommandMenuItems = ({

@@ -3,6 +3,8 @@ import {
   DIRECTOR_BASE_PATH,
   type BlackboardSync,
   type BoundaryMemory,
+  type DirectorSettings,
+  type DirectorSettingsState,
   type NodeBlackboard,
   type NodeId,
   type NodeOwnership,
@@ -11,10 +13,12 @@ import {
   type OrgSummary,
   type RoutedMessage,
   type RouteMessageRequest,
+  type TeamMatch,
 } from "./types";
 
 const SESSION_KEY_HEADER = "X-Session-API-Key";
 const ORG_PATH = "/org";
+const SETTINGS_PATH = "/settings";
 const TREE_STREAM_PATH = "/org/tree-stream";
 const NODE_QUERY_PARAM = "node";
 const FULL_QUERY_PARAM = "full";
@@ -122,6 +126,29 @@ export const DirectorClient = {
    */
   pullBlackboard(remote = "origin") {
     return postJson<BlackboardSync>(`${ORG_PATH}/blackboard/pull`, { remote });
+  },
+
+  /** The limits on new teams, beside how large the org is now. */
+  getSettings() {
+    return requestJson<DirectorSettingsState>(SETTINGS_PATH);
+  },
+
+  /**
+   * Change the limits on new teams. They are checked only when a team
+   * splits, so lowering one removes nothing.
+   */
+  updateSettings(settings: Partial<DirectorSettings>) {
+    return requestJson<DirectorSettingsState>(SETTINGS_PATH, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(settings),
+    });
+  },
+
+  /** Teams whose title or directory has every word of `query`. */
+  searchTeams(query: string, limit = 8) {
+    const params = new URLSearchParams({ q: query, limit: String(limit) });
+    return requestJson<TeamMatch[]>(`${ORG_PATH}/search?${params}`);
   },
 
   /**

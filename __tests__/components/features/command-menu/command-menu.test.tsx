@@ -11,7 +11,9 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderToStaticMarkup } from "react-dom/server";
+import { http, HttpResponse } from "msw";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { server } from "#/mocks/node";
 import { CommandMenu } from "#/components/features/command-menu/command-menu";
 import { CommandMenuTrigger } from "#/components/features/command-menu/command-menu-trigger";
 import { COMMAND_MENU_ROUTE } from "#/components/features/command-menu/command-menu-items";
@@ -689,6 +691,39 @@ describe("the command menu shortcut hint", () => {
       ).toBeInTheDocument();
     },
   );
+
+  it("offers the teams of the org that match what was typed, and goes to one", async () => {
+    server.use(
+      http.get("*/api/director/org/search", ({ request }) =>
+        HttpResponse.json(
+          new URL(request.url).searchParams.get("q") === "oauth"
+            ? [
+                {
+                  id: "oauth",
+                  title: "OAuth team",
+                  path: "services/auth/oauth",
+                },
+              ]
+            : [],
+        ),
+      ),
+    );
+    const user = userEvent.setup();
+    const { navigate } = renderCommandMenu(vi.fn());
+    await user.keyboard("{Control>}k{/Control}");
+
+    await user.type(
+      await screen.findByRole("combobox", { name: SEARCH_LABEL_KEY }),
+      "oauth",
+    );
+    const team = await screen.findByRole("option", { name: /OAuth team/ });
+
+    expect(team).toHaveTextContent("services/auth/oauth");
+
+    await user.click(team);
+
+    expect(navigate).toHaveBeenCalledWith("/org/oauth");
+  });
 });
 
 describe("CommandMenuTrigger", () => {
