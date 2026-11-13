@@ -20,7 +20,14 @@ const OUTCOME_KEYS = {
  * the tree of teams, their specs, contracts and rules, and the branches of
  * their work. Nothing travels until one of the two is pressed.
  */
-export function OrgSync({ canPush = true }: { canPush?: boolean }) {
+export function OrgSync({
+  canPush = true,
+  merging = false,
+}: {
+  canPush?: boolean;
+  /** A pull waits for choices; its conflicts are shown by the page. */
+  merging?: boolean;
+}) {
   const { t } = useTranslation("openhands");
   const queryClient = useQueryClient();
   const sync = useMutation({
@@ -36,7 +43,10 @@ export function OrgSync({ canPush = true }: { canPush?: boolean }) {
     },
     meta: { disableToast: true },
   });
-  const result = sync.data;
+  // Once a merge is finished or abandoned there is nothing left to say
+  // about the pull that began it.
+  const result =
+    sync.data?.result === "conflicts" && !merging ? undefined : sync.data;
   const keptLocal = result?.blackboard?.kept_local ?? [];
   const diverged = (result?.branches ?? []).filter(
     (branch) => branch.result === "diverged",

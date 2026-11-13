@@ -211,7 +211,9 @@ export function OrgChartView({ nodeId }: OrgChartViewProps) {
               </span>
             ) : null}
             <TeamSearch />
-            {org.data && !org.data.fixture ? <OrgSync /> : null}
+            {org.data && !org.data.fixture ? (
+              <OrgSync merging={org.data.merging} />
+            ) : null}
             <ChartToolbar />
             {org.data && !org.data.fixture && org.data.paused === null ? (
               <PauseButton />

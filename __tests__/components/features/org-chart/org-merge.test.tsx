@@ -2,8 +2,13 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { describe, expect, it } from "vitest";
-import type { OrgMerge, OrgSummary, OrgSync } from "#/api/director/types";
+import type {
+  OrgMerge,
+  OrgSummary,
+  OrgSync as SyncResult,
+} from "#/api/director/types";
 import { MergeConflicts } from "#/components/features/org-chart/org-merge";
+import { OrgSync } from "#/components/features/org-chart/org-sync";
 import { StartOrgNotice } from "#/components/features/org-chart/start-org-notice";
 import { server } from "#/mocks/node";
 import { renderWithProviders } from "test-utils";
@@ -34,7 +39,7 @@ const MERGE: OrgMerge = {
   ],
 };
 
-const DONE: OrgSync = {
+const DONE: SyncResult = {
   remote: "origin",
   result: "merged",
   merge: null,
@@ -164,6 +169,28 @@ describe("MergeConflicts", () => {
     renderWithProviders(<MergeConflicts />);
 
     await waitFor(() => expect(screen.queryByTestId("org-merge")).toBeNull());
+  });
+});
+
+describe("OrgSync", () => {
+  it("says that a pull stopped on conflicts only while the merge waits", async () => {
+    server.use(
+      http.post("*/api/director/org/pull", () =>
+        HttpResponse.json({ ...DONE, result: "conflicts", merge: MERGE }),
+      ),
+    );
+    const user = userEvent.setup();
+    const { rerender } = renderWithProviders(<OrgSync merging />);
+
+    await user.click(
+      screen.getByRole("button", { name: "ORG_CHART$BLACKBOARD_PULL" }),
+    );
+    expect(
+      await screen.findByText("ORG_CHART$SYNC_CONFLICTS"),
+    ).toBeInTheDocument();
+    rerender(<OrgSync merging={false} />);
+
+    expect(screen.queryByText("ORG_CHART$SYNC_CONFLICTS")).toBeNull();
   });
 });
 
