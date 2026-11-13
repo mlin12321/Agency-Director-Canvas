@@ -10,7 +10,7 @@ const ROOMY = { width: 1100, height: 500 };
 
 describe("fitFocusedChart", () => {
   it("zooms a team to the width it has when one row is the largest it gets", () => {
-    // Six in a row are 1040 wide and 197 tall.
+    // Six in a row are 1040 wide and 229 tall.
     const fit = fitFocusedChart(team(6, true), { width: 1300, height: 300 });
 
     expect(fit.columns).toBe(6);
@@ -18,11 +18,11 @@ describe("fitFocusedChart", () => {
   });
 
   it("wraps the reports into rows when that makes the team larger", () => {
-    // One row of fifteen would be 0.42; four rows of four are 688 by 389.
+    // One row of fifteen would be 0.42; three rows of five are 864 by 381.
     const fit = fitFocusedChart(team(15), ROOMY);
 
-    expect(fit.columns).toBe(4);
-    expect(fit.scale).toBeCloseTo(500 / 389);
+    expect(fit.columns).toBe(5);
+    expect(fit.scale).toBeCloseTo(1100 / 864);
   });
 
   it("enlarges a small team to twice its size and no further, in one row", () => {

@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import type { NodeId, OrgNode } from "#/api/director/types";
+import type { OrgNode } from "#/api/director/types";
 import { I18nKey } from "#/i18n/declaration";
 import { StatusBadge } from "./status-badge";
 import {
@@ -26,23 +26,28 @@ function Row({
 
 interface NodeHoverCardProps {
   node: OrgNode;
-  /** Title of a team by id, when the page has it. */
-  titleOf: (id: NodeId) => string;
 }
 
 /**
  * What a team is doing and what it owns. Shown only while its card is
  * hovered or focused, so the chart itself stays a plain picture of the org.
  */
-export function NodeHoverCard({ node, titleOf }: NodeHoverCardProps) {
+export function NodeHoverCard({ node }: NodeHoverCardProps) {
   const { t } = useTranslation("openhands");
   const { boundary } = node;
+  // What a team above still holds is that team's to settle, not the human's.
+  const waiting = node.escalations.filter(
+    (escalation) => escalation.held_by === null,
+  );
 
   return (
     <div className="flex w-80 max-w-full flex-col gap-2 break-normal p-1 text-left text-xs">
       <p className="text-sm font-medium text-contrast">{node.title}</p>
-      {node.spec_summary ? (
-        <p className="text-text-secondary">{node.spec_summary}</p>
+      {node.headline ? (
+        <p className="text-text-secondary">{node.headline}</p>
+      ) : null}
+      {node.spec_summary && node.spec_summary !== node.headline ? (
+        <p className="text-muted">{node.spec_summary}</p>
       ) : null}
       <dl className="flex flex-col gap-1">
         <Row label={t(I18nKey.ORG_CHART$STATUS)}>
@@ -89,20 +94,15 @@ export function NodeHoverCard({ node, titleOf }: NodeHoverCardProps) {
           </span>
         </div>
       ) : null}
-      {node.escalations.length > 0 ? (
-        // What this team sent up, and which team above is dealing with it.
+      {waiting.length > 0 ? (
         <ul className="flex flex-col gap-1 border-t border-border pt-2">
-          {node.escalations.map((escalation) => (
+          {waiting.map((escalation) => (
             <li key={escalation.id} className="flex flex-col">
               <span className="text-contrast">{escalation.title}</span>
               <span className="text-muted">
                 {t(ESCALATION_LABEL_KEYS[escalation.kind])}
                 {" · "}
-                {escalation.held_by === null
-                  ? t(I18nKey.ORG_CHART$ESCALATION_WAITING)
-                  : t(I18nKey.ORG_CHART$ESCALATION_HELD_BY, {
-                      team: titleOf(escalation.held_by),
-                    })}
+                {t(I18nKey.ORG_CHART$ESCALATION_WAITING)}
               </span>
             </li>
           ))}

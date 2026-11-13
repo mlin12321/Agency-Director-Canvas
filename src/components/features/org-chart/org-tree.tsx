@@ -7,7 +7,6 @@ interface OrgTreeProps {
   nodes: ReadonlyMap<NodeId, OrgNode>;
   /** The team the page is on; it is outlined and brought to the middle. */
   currentId: NodeId;
-  titleOf: (id: NodeId) => string;
   onOpenDetails: () => void;
 }
 
@@ -30,7 +29,6 @@ function Card({ node, ...tree }: Omit<BranchProps, "isTop">) {
     <NodeCard
       node={node}
       current={node.id === tree.currentId}
-      titleOf={tree.titleOf}
       onOpenDetails={tree.onOpenDetails}
       centerInScroller
     />

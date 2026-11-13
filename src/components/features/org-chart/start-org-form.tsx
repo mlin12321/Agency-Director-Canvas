@@ -1,36 +1,35 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import type { OrgSummary } from "#/api/director/types";
+import type { OrgSummary, RoutedMessage } from "#/api/director/types";
 import {
   AcpOrgUnsupportedError,
-  useStartOrg,
-} from "#/hooks/mutation/use-start-org";
+  useSendToOrg,
+} from "#/hooks/mutation/use-send-to-org";
 import { I18nKey } from "#/i18n/declaration";
 
 interface StartOrgFormProps {
   org: OrgSummary;
-  /** Called once the org exists, so the page can follow it at once. */
-  onStarted: () => void;
+  /** Called once the org exists, with the team that took the message. */
+  onStarted: (routed: RoutedMessage) => void;
 }
 
 /**
- * What the chart shows while the director has no org: a task for the root
- * team, whose IC starts on it and splits the work into sub-teams as needed.
+ * What the chart shows while the director has no org: room for a first
+ * message. Sending it starts the org: a root team takes the message as its
+ * task, is named from it, and splits the work into sub-teams as needed.
  */
 export function StartOrgForm({ org, onStarted }: StartOrgFormProps) {
   const { t } = useTranslation("openhands");
-  const [title, setTitle] = React.useState("");
-  const [task, setTask] = React.useState("");
-  const titleId = React.useId();
-  const taskId = React.useId();
-  const start = useStartOrg();
-  const ready = title.trim() !== "" && task.trim() !== "";
+  const [text, setText] = React.useState("");
+  const textId = React.useId();
+  const send = useSendToOrg();
+  const ready = text.trim() !== "";
 
   const onSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     if (!ready) return;
-    start.mutate(
-      { title: title.trim(), task: task.trim(), repoPath: org.repo_path },
+    send.mutate(
+      { text: text.trim(), startIn: org.repo_path },
       { onSuccess: onStarted },
     );
   };
@@ -52,40 +51,31 @@ export function StartOrgForm({ org, onStarted }: StartOrgFormProps) {
       <p className="text-sm text-muted">
         {t(I18nKey.ORG_CHART$START_BODY, { path: org.repo_path })}
       </p>
-      <label htmlFor={titleId} className="text-xs text-muted">
-        {t(I18nKey.ORG_CHART$START_NAME_LABEL)}
-      </label>
-      <input
-        id={titleId}
-        value={title}
-        onChange={(event) => setTitle(event.target.value)}
-        className="rounded-md border border-border-input bg-field p-2 text-sm text-field-foreground"
-      />
-      <label htmlFor={taskId} className="text-xs text-muted">
+      <label htmlFor={textId} className="text-xs text-muted">
         {t(I18nKey.ORG_CHART$START_TASK_LABEL)}
       </label>
       <textarea
-        id={taskId}
-        value={task}
-        onChange={(event) => setTask(event.target.value)}
+        id={textId}
+        value={text}
+        onChange={(event) => setText(event.target.value)}
         rows={5}
         className="rounded-md border border-border-input bg-field p-2 text-sm text-field-foreground"
       />
-      {start.isError ? (
+      {send.isError ? (
         <p role="alert" className="text-xs text-feedback-error">
-          {start.error instanceof AcpOrgUnsupportedError
+          {send.error instanceof AcpOrgUnsupportedError
             ? t(I18nKey.ORG_CHART$START_ACP_UNSUPPORTED)
             : t(I18nKey.ORG_CHART$START_FAILED, {
-                reason: start.error.message,
+                reason: send.error.message,
               })}
         </p>
       ) : null}
       <button
         type="submit"
-        disabled={!ready || start.isPending}
+        disabled={!ready || send.isPending}
         className="self-start rounded-md border border-border px-3 py-1.5 text-sm text-contrast hover:bg-surface-raised disabled:opacity-50"
       >
-        {start.isPending
+        {send.isPending
           ? t(I18nKey.ORG_CHART$START_STARTING)
           : t(I18nKey.ORG_CHART$START_SUBMIT)}
       </button>

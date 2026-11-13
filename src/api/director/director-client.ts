@@ -2,12 +2,13 @@ import { getEffectiveLocalBackend } from "../backend-registry/active-store";
 import {
   DIRECTOR_BASE_PATH,
   type BoundaryMemory,
-  type CreateOrgRequest,
   type NodeBlackboard,
   type NodeId,
   type OrgEvent,
   type OrgNode,
   type OrgSummary,
+  type RoutedMessage,
+  type RouteMessageRequest,
 } from "./types";
 
 const SESSION_KEY_HEADER = "X-Session-API-Key";
@@ -78,9 +79,12 @@ export const DirectorClient = {
     return requestJson<OrgSummary>(ORG_PATH);
   },
 
-  /** Start an org and brief the IC of its root team with the task. */
-  createOrg(request: CreateOrgRequest) {
-    return postJson<OrgNode>(ORG_PATH, request);
+  /**
+   * Say something to the org. It goes to the IC of the nearest team at or
+   * above `path`; without an org it starts one and becomes its task.
+   */
+  routeMessage(request: RouteMessageRequest) {
+    return postJson<RoutedMessage>(`${ORG_PATH}/messages`, request);
   },
 
   /**

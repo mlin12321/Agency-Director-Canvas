@@ -9,6 +9,7 @@ import type {
   NodeStatus,
   OrgEvent,
   OrgSummary,
+  RoutedMessage,
   SplitProposal,
 } from "#/api/director/types";
 import { buildStartConversationRequestWithEncryptedSettings } from "#/api/agent-server-adapter";
@@ -450,11 +451,51 @@ describe("OrgChartView", () => {
           "ORG_CHART$ROLE_IC (working), ORG_CHART$ROLE_MANAGER (idle)",
         ),
       ).toBeInTheDocument();
-      // What the team sent up, and that a team above still has it.
-      expect(within(tip).getByText("Pick a token format")).toBeInTheDocument();
+      // What a team above still holds is not the human's to see.
+      expect(within(tip).queryByText("Pick a token format")).toBeNull();
+    });
+
+    it("shows on a team's card only the escalations that wait on the human", async () => {
+      const user = userEvent.setup();
+      store.upsert(
+        input("billing", "root", "blocked", "services/billing", [
+          DOUBLE_CHARGE,
+          {
+            ...TOKEN_DECISION,
+            id: "ledger",
+            title: "Pick a ledger",
+            held_by: "root",
+          },
+        ]),
+      );
+      renderWithProviders(<OrgChartView nodeId={null} />);
+      await findCard("billing");
+
+      for (let presses = 0; presses < 12; presses += 1) {
+        if (document.activeElement === teamLink("billing")) break;
+        await user.tab();
+      }
+
+      const tip = await screen.findByRole("tooltip");
+      expect(within(tip).getByText("Retries charge twice")).toBeInTheDocument();
       expect(
-        within(tip).getByText(/ORG_CHART\$ESCALATION_HELD_BY/),
+        within(tip).getByText(/ORG_CHART\$ESCALATION_WAITING/),
       ).toBeInTheDocument();
+      expect(within(tip).queryByText("Pick a ledger")).toBeNull();
+    });
+
+    it("says on each card, in a line, what the team is delivering", async () => {
+      store.upsert({
+        ...input("auth", "root", "working", "services/auth"),
+        headline: "Adds passkey sign-in.",
+      });
+      renderWithProviders(<OrgChartView nodeId={null} />);
+      await findCard("auth");
+
+      expect(
+        within(card("auth")).getByText("Adds passkey sign-in."),
+      ).toBeInTheDocument();
+      expect(within(card("search")).queryByText(/Spec for/)).toBeNull();
     });
   });
 
@@ -1052,19 +1093,27 @@ describe("OrgChartView", () => {
 
     function withoutOrg(summary: OrgSummary = SUMMARY) {
       store = new OrgStore();
-      const started: unknown[] = [];
+      const sent: unknown[] = [];
       server.use(
         streamHandler(),
         http.get("*/api/director/org", () => HttpResponse.json(summary)),
-        http.post("*/api/director/org", async ({ request }) => {
-          started.push(await request.json());
-          return HttpResponse.json(
-            store.upsert(input("root", null, "working", "")),
-            { status: 201 },
-          );
+        http.post("*/api/director/org/messages", async ({ request }) => {
+          sent.push(await request.json());
+          store.upsert({
+            ...input("root", null, "working", ""),
+            agents: [
+              { role: "ic", conversation_id: "conv-ic", status: "working" },
+            ],
+          });
+          const routed: RoutedMessage = {
+            node_id: "root",
+            conversation_id: "conv-ic",
+            started_org: true,
+          };
+          return HttpResponse.json(routed);
         }),
       );
-      return started;
+      return sent;
     }
 
     async function fillAndSubmit(user: ReturnType<typeof userEvent.setup>) {
@@ -1075,10 +1124,7 @@ describe("OrgChartView", () => {
         name: "ORG_CHART$START_SUBMIT",
       });
       expect(submit).toBeDisabled();
-      await user.type(
-        within(form).getByLabelText("ORG_CHART$START_NAME_LABEL"),
-        "Shop",
-      );
+      expect(within(form).getAllByRole("textbox")).toHaveLength(1);
       await user.type(
         within(form).getByLabelText("ORG_CHART$START_TASK_LABEL"),
         "Build the checkout",
@@ -1103,8 +1149,9 @@ describe("OrgChartView", () => {
       }));
     });
 
-    it("starts one from a name and a task, as a conversation in the director's repository, and follows it at once", async () => {
+    it("starts one from the first message alone, as a conversation in the director's repository, and opens the team that took it", async () => {
       const started = withoutOrg();
+      blackboardHandlers();
       const user = userEvent.setup();
       renderWithProviders(<OrgChartView nodeId={null} />);
 
@@ -1112,10 +1159,12 @@ describe("OrgChartView", () => {
 
       // Well inside the stream's first retry delay.
       expect(await findCard("root", 800)).toBeInTheDocument();
+      expect(await screen.findByTestId("conversation-view")).toHaveTextContent(
+        "conv-ic",
+      );
       expect(started).toEqual([
         {
-          title: "Shop",
-          task: "Build the checkout",
+          text: "Build the checkout",
           conversation: expect.objectContaining({
             conversation_id: expect.any(String),
             workspace: { working_dir: "/work/shop" },
@@ -1145,7 +1194,7 @@ describe("OrgChartView", () => {
     it("shows why the server refused", async () => {
       withoutOrg();
       server.use(
-        http.post("*/api/director/org", () =>
+        http.post("*/api/director/org/messages", () =>
           HttpResponse.json(
             { detail: "The server is at its run limit" },
             { status: 429 },
@@ -1173,7 +1222,171 @@ describe("OrgChartView", () => {
     });
   });
 
+  describe("a message to the org", () => {
+    function routing(to: string) {
+      const sent: unknown[] = [];
+      server.use(
+        http.post("*/api/director/org/messages", async ({ request }) => {
+          sent.push(await request.json());
+          const routed: RoutedMessage = {
+            node_id: to,
+            conversation_id: "conv-ic",
+            started_org: false,
+          };
+          return HttpResponse.json(routed);
+        }),
+      );
+      return sent;
+    }
+
+    function form() {
+      return screen.getByRole("form", { name: "ORG_CHART$ASK_LABEL" });
+    }
+
+    it("starts out from the folder of the team the page is on, and opens the team that took it", async () => {
+      const sent = routing("auth");
+      blackboardHandlers();
+      const navigate = vi.fn();
+      const user = userEvent.setup();
+      renderWithProviders(<OrgChartView nodeId="auth" />, {
+        navigation: { navigate },
+      });
+      await findCard("auth");
+
+      const folder = within(form()).getByLabelText("ORG_CHART$ASK_PATH_LABEL");
+      expect(folder).toHaveValue("services/auth");
+      const message = within(form()).getByRole("textbox", {
+        name: "ORG_CHART$ASK_LABEL",
+      });
+      await user.type(message, "Add passkeys");
+      await user.click(
+        within(form()).getByRole("button", { name: "ORG_CHART$ASK_SEND" }),
+      );
+
+      expect(
+        await screen.findByRole("dialog", { name: "auth team" }),
+      ).toBeInTheDocument();
+      expect(sent).toEqual([{ text: "Add passkeys", path: "services/auth" }]);
+      expect(message).toHaveValue("");
+      expect(within(form()).getByRole("status")).toHaveTextContent(
+        "ORG_CHART$ASK_SENT",
+      );
+      // The page is already on the team that took it.
+      expect(navigate).not.toHaveBeenCalled();
+    });
+
+    it("starts out from the folder the server was started for when the team on the page owns it", async () => {
+      const summary: OrgSummary = {
+        root_id: "root",
+        node_count: 5,
+        repo_path: "/work/shop",
+        directory: "services/auth/vendor/tokens",
+        is_git_repository: true,
+        fixture: false,
+      };
+      server.use(
+        http.get("*/api/director/org", () => HttpResponse.json(summary)),
+      );
+      const { unmount } = renderWithProviders(<OrgChartView nodeId="auth" />);
+      await findCard("auth");
+
+      await waitFor(() =>
+        expect(
+          within(form()).getByLabelText("ORG_CHART$ASK_PATH_LABEL"),
+        ).toHaveValue("services/auth/vendor/tokens"),
+      );
+
+      // Another team's page keeps to that team's folder.
+      unmount();
+      renderWithProviders(<OrgChartView nodeId="billing" />);
+      await findCard("billing");
+      await waitFor(() =>
+        expect(
+          within(form()).getByLabelText("ORG_CHART$ASK_PATH_LABEL"),
+        ).toHaveValue("services/billing"),
+      );
+    });
+
+    it("moves the page to the team that took it when that is another one", async () => {
+      const sent = routing("oauth");
+      const navigate = vi.fn();
+      const user = userEvent.setup();
+      renderWithProviders(<OrgChartView nodeId={null} />, {
+        navigation: { navigate },
+      });
+      await findCard("root");
+
+      const folder = within(form()).getByLabelText("ORG_CHART$ASK_PATH_LABEL");
+      expect(folder).toHaveValue("");
+      await user.type(folder, "services/auth/oauth/providers");
+      await user.type(
+        within(form()).getByRole("textbox", { name: "ORG_CHART$ASK_LABEL" }),
+        "Add GitHub{Enter}",
+      );
+
+      await waitFor(() => expect(navigate).toHaveBeenCalledWith("/org/oauth"));
+      expect(sent).toEqual([
+        { text: "Add GitHub", path: "services/auth/oauth/providers" },
+      ]);
+    });
+
+    it("keeps the message and says why when the server refuses it", async () => {
+      server.use(
+        http.post("*/api/director/org/messages", () =>
+          HttpResponse.json(
+            { detail: "No team of the org can take the message" },
+            { status: 409 },
+          ),
+        ),
+      );
+      const user = userEvent.setup();
+      renderWithProviders(<OrgChartView nodeId={null} />);
+      await findCard("root");
+
+      const message = within(form()).getByRole("textbox", {
+        name: "ORG_CHART$ASK_LABEL",
+      });
+      await user.type(message, "Add GitHub{Enter}");
+
+      expect(await within(form()).findByRole("alert")).toHaveTextContent(
+        "ORG_CHART$ASK_FAILED",
+      );
+      expect(message).toHaveValue("Add GitHub");
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+  });
+
   describe("team details", () => {
+    it.each([
+      ["sandbox", "ORG_CHART$ENFORCED_SANDBOX"],
+      ["checks", "ORG_CHART$ENFORCED_CHECKS"],
+    ] as const)(
+      "says how the server holds the team to its boundary (%s)",
+      async (enforcement, text) => {
+        blackboardHandlers();
+        server.use(
+          http.get("*/api/director/org", () =>
+            HttpResponse.json({
+              root_id: "root",
+              node_count: 5,
+              repo_path: "/work/shop",
+              is_git_repository: true,
+              fixture: false,
+              boundary_enforcement: enforcement,
+            } satisfies OrgSummary),
+          ),
+        );
+        const user = userEvent.setup();
+        renderWithProviders(<OrgChartView nodeId="auth" />);
+        await findCard("auth");
+
+        await user.click(currentCard());
+
+        const drawer = screen.getByRole("dialog", { name: "auth team" });
+        expect(await within(drawer).findByText(text)).toBeInTheDocument();
+      },
+    );
+
     it("opens when the team the page is on is clicked, on its first agent, and closes again", async () => {
       blackboardHandlers();
       const user = userEvent.setup();
