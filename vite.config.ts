@@ -545,6 +545,9 @@ export default defineConfig(({ mode }) => {
       // production behavior.
       testTimeout: 30000,
       hookTimeout: 30000,
+      // Tests that group or print times by day assume UTC, as CI runs in.
+      // Without this they fail on a machine in another time zone.
+      env: { TZ: "UTC" },
       server: {
         deps: {
           inline: ["@openhands/typescript-client"],
