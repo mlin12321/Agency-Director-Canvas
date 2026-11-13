@@ -1,8 +1,12 @@
 import React from "react";
 import { AppearancePortal } from "#/components/shared/appearance-portal";
-import { Search, X } from "lucide-react";
+import { Network, Search, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
+import { DirectorClient } from "#/api/director/director-client";
+import type { TeamMatch } from "#/api/director/types";
+import { orgNodePath } from "#/constants/org-chart";
+import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useNavigation } from "#/context/navigation-context";
 import { useCloseOnEscape } from "#/hooks/use-close-on-escape";
 import { useCommandMenuStore } from "#/stores/command-menu-store";
@@ -27,6 +31,9 @@ const COMMAND_MENU_ARROW_DOWN_KEY = "ArrowDown";
 const COMMAND_MENU_ARROW_UP_KEY = "ArrowUp";
 const COMMAND_MENU_ENTER_KEY = "Enter";
 const EMPTY_QUERY = "";
+/** Teams of the org are looked up from this many characters on. */
+const MIN_TEAM_QUERY_LENGTH = 2;
+const TEAM_ICON_SIZE = 18;
 const EMPTY_RESULTS_ACTIVE_INDEX = -1;
 
 function getOptionId(item: CommandMenuItemDefinition) {
@@ -57,6 +64,29 @@ function matchesQuery({
     .toLocaleLowerCase();
 
   return terms.every((term) => searchableText.includes(term));
+}
+
+/**
+ * The teams of the org that match what was typed. A server without an org
+ * answers with an error, and then there are none.
+ */
+function useTeamMatches(query: string, enabled: boolean) {
+  const [teams, setTeams] = React.useState<TeamMatch[]>([]);
+  React.useEffect(() => {
+    if (!enabled) {
+      setTeams([]);
+      return undefined;
+    }
+    let current = true;
+    DirectorClient.searchTeams(query).then(
+      (found) => current && setTeams(found),
+      () => current && setTeams([]),
+    );
+    return () => {
+      current = false;
+    };
+  }, [query, enabled]);
+  return teams;
 }
 
 export function CommandMenu() {
@@ -118,13 +148,29 @@ export function CommandMenu() {
     [],
   );
 
-  const filteredItems = React.useMemo(
-    () =>
-      items.filter((item) =>
-        matchesQuery({ item, query, translate: (key) => t(key) }),
-      ),
-    [items, query, t],
+  const { backend } = useActiveBackend();
+  const teamQuery = query.trim();
+  const teams = useTeamMatches(
+    teamQuery,
+    isOpen &&
+      backend.kind !== "cloud" &&
+      teamQuery.length >= MIN_TEAM_QUERY_LENGTH,
   );
+
+  const filteredItems = React.useMemo(() => {
+    const matching = items.filter((item) =>
+      matchesQuery({ item, query, translate: (key) => t(key) }),
+    );
+    const found = teams.map((team): CommandMenuItemDefinition => ({
+      id: `team-${team.id}`,
+      group: "teams",
+      title: team.title,
+      description: team.path || "/",
+      icon: <Network size={TEAM_ICON_SIZE} />,
+      to: orgNodePath(team.id),
+    }));
+    return [...matching, ...found];
+  }, [items, query, teamQuery, teams, t]);
 
   React.useEffect(() => {
     setActiveIndex((currentIndex) => {

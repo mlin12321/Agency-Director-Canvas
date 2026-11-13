@@ -127,6 +127,9 @@ export const DIRECTOR_QUERY_KEYS = {
     ["director", "blackboard", backendId, nodeId] as const,
   ownership: (backendId: string, nodeId: string) =>
     ["director", "ownership", backendId, nodeId] as const,
+  settings: (backendId: string) => ["director", "settings", backendId] as const,
+  search: (backendId: string, query: string) =>
+    ["director", "search", backendId, query] as const,
 } as const;
 
 export const MARS_QUERY_KEYS = {
