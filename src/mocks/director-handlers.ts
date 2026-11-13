@@ -4,6 +4,7 @@ import {
   type AgentRef,
   type StatusCounts,
   type NodeBlackboard,
+  type NodeOwnership,
   type NodeStatus,
   type NodeId,
   type OpenEscalation,
@@ -385,6 +386,47 @@ export const DIRECTOR_HANDLERS = [
       specs: [],
       memory: { rules: taughtRules.get(nodeId) ?? [] },
       autopsies: [],
+    };
+    return HttpResponse.json(body);
+  }),
+
+  http.get(`${BASE}/org/nodes/:nodeId/ownership`, ({ params }) => {
+    const nodeId = String(params.nodeId);
+    const node = tree.get(nodeId);
+    if (!node) return notFound(nodeId);
+    const reports = reportsOf(nodeId);
+    const kept = node.boundary.path ? `${node.boundary.path}/` : "";
+    const [first, second] = reports;
+    const body: NodeOwnership = {
+      node_id: nodeId,
+      owners: reports.map((report) => ({
+        node_id: report.id,
+        title: report.title,
+        path: report.boundary.path,
+        isolation: report.isolation,
+        branch: report.branch,
+      })),
+      files: [
+        { path: `${kept}README.md`, owner: null },
+        ...reports.flatMap((report) =>
+          ["README.md", "src/main.py", "tests/test_main.py"].map((file) => ({
+            path: `${report.boundary.path}/${file}`,
+            owner: report.id,
+          })),
+        ),
+      ],
+      truncated: false,
+      // The first two reports work in worktrees of their own at the root.
+      collisions:
+        nodeId === ROOT_ID && first && second
+          ? [
+              {
+                path: `${first.boundary.path}/src/main.py`,
+                node_ids: [first.id, second.id],
+              },
+            ]
+          : [],
+      collisions_checked: true,
     };
     return HttpResponse.json(body);
   }),

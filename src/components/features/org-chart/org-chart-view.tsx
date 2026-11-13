@@ -7,6 +7,7 @@ import { NavigationLink } from "#/components/shared/navigation-link";
 import { ORG_CHART_PATH } from "#/constants/org-chart";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { DIRECTOR_QUERY_KEYS } from "#/hooks/query/query-keys";
+import { useNodeOwnership } from "#/hooks/query/use-node-ownership";
 import { useOrgTree } from "#/hooks/use-org-tree";
 import { I18nKey } from "#/i18n/declaration";
 import { useOrgChartStore } from "#/stores/org-chart-store";
@@ -17,6 +18,7 @@ import { EscalationsPanel } from "./escalations-panel";
 import { FocusedChart, fitFocusedChart } from "./focused-chart";
 import { OrgBreadcrumb } from "./org-breadcrumb";
 import { OrgTree } from "./org-tree";
+import { OwnershipMap } from "./ownership-map";
 import { HOME_PATH, StartOrgNotice } from "./start-org-notice";
 
 interface OrgChartViewProps {
@@ -103,6 +105,13 @@ export function OrgChartView({ nodeId }: OrgChartViewProps) {
   }, [frame]);
   const top = focusId === null ? null : (nodes.get(focusId) ?? null);
   const current = full && nodeId !== null ? (nodes.get(nodeId) ?? null) : top;
+  // A server without the route answers with an error and gets no map.
+  const ownership = useNodeOwnership(current).data;
+  const colliding = React.useMemo(
+    () =>
+      new Set(ownership?.collisions.flatMap((collision) => collision.node_ids)),
+    [ownership],
+  );
 
   // In the whole-org view an unknown team is one the tree does not hold.
   if (status === "not_found" || (top && !current)) {
@@ -195,6 +204,7 @@ export function OrgChartView({ nodeId }: OrgChartViewProps) {
                   root={top}
                   nodes={nodes}
                   currentId={current.id}
+                  collidingIds={colliding}
                   onOpenDetails={openDetails}
                 />
               ) : (
@@ -203,12 +213,14 @@ export function OrgChartView({ nodeId }: OrgChartViewProps) {
                   parent={ancestors.at(-1) ?? null}
                   reports={reports}
                   columns={fit.columns}
+                  collidingIds={colliding}
                   onOpenDetails={openDetails}
                 />
               )}
             </div>
           </div>
         </section>
+        <OwnershipMap node={current} ownership={ownership} />
         {org.data ? (
           <p className="text-xs text-muted">
             {t(I18nKey.ORG_CHART$TALK_HINT, { path: org.data.repo_path })}{" "}

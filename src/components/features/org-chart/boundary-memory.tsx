@@ -56,6 +56,7 @@ export function BoundaryMemory({ node }: BoundaryMemoryProps) {
     );
   } else {
     const { rules } = blackboard.data.memory;
+    const { autopsies } = blackboard.data;
     body = (
       <>
         {rules.length === 0 ? (
@@ -93,6 +94,34 @@ export function BoundaryMemory({ node }: BoundaryMemoryProps) {
             {t(I18nKey.ORG_CHART$TEACH_SUBMIT)}
           </button>
         </form>
+        {autopsies.length > 0 ? (
+          <section
+            aria-label={t(I18nKey.ORG_CHART$AUTOPSIES_TITLE)}
+            className="flex flex-col gap-1"
+          >
+            <h4 className="text-xs font-medium text-contrast">
+              {t(I18nKey.ORG_CHART$AUTOPSIES_TITLE)}
+            </h4>
+            <ul className="flex flex-col gap-1.5 text-xs text-text-secondary">
+              {autopsies.map((autopsy) => (
+                <li key={autopsy.at} className="flex flex-col">
+                  <span className="text-contrast">{autopsy.approach}</span>
+                  <span>{autopsy.why_failed}</span>
+                  <span className="text-muted">
+                    <time dateTime={autopsy.at}>
+                      {new Date(autopsy.at).toLocaleString()}
+                    </time>
+                    {autopsy.saved_ref
+                      ? ` · ${t(I18nKey.ORG_CHART$AUTOPSY_SAVED, {
+                          ref: autopsy.saved_ref,
+                        })}`
+                      : null}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
       </>
     );
   }

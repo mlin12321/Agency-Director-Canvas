@@ -1,7 +1,7 @@
 import React from "react";
 import { Ellipsis } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import type { OrgNode } from "#/api/director/types";
+import type { NodeId, OrgNode } from "#/api/director/types";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import { orgNodePath } from "#/constants/org-chart";
 import { I18nKey } from "#/i18n/declaration";
@@ -13,6 +13,8 @@ interface FocusedChartProps {
   reports: OrgNode[];
   /** Reports to a row, from `fitFocusedChart`. */
   columns: number;
+  /** Teams whose committed work conflicts with another team's. */
+  collidingIds: ReadonlySet<NodeId>;
   onOpenDetails: () => void;
 }
 
@@ -113,6 +115,7 @@ export function FocusedChart({
   parent,
   reports,
   columns,
+  collidingIds,
   onOpenDetails,
 }: FocusedChartProps) {
   const { t } = useTranslation("openhands");
@@ -135,7 +138,12 @@ export function FocusedChart({
           />
         </NavigationLink>
       ) : null}
-      <NodeCard node={current} current onOpenDetails={onOpenDetails} />
+      <NodeCard
+        node={current}
+        current
+        collides={collidingIds.has(current.id)}
+        onOpenDetails={onOpenDetails}
+      />
       {reports.length > 0 ? (
         <>
           <span aria-hidden="true" className={`h-4 ${LINE}`} />
@@ -148,6 +156,7 @@ export function FocusedChart({
                 <NodeCard
                   node={report}
                   current={false}
+                  collides={collidingIds.has(report.id)}
                   onOpenDetails={onOpenDetails}
                 />
                 {report.child_ids.length > 0 ? (

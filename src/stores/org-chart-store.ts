@@ -10,6 +10,8 @@ interface OrgChartState {
   view: OrgChartViewMode;
   /** Scale of the chart; 1 is actual size. */
   zoom: number;
+  /** Whether the map of who owns which file is open under the chart. */
+  ownershipOpen: boolean;
 }
 
 interface OrgChartActions {
@@ -17,6 +19,7 @@ interface OrgChartActions {
   zoomIn: () => void;
   zoomOut: () => void;
   resetZoom: () => void;
+  toggleOwnership: () => void;
 }
 
 /** Keeps zoom on a step and in range, whatever was stored. */
@@ -41,6 +44,9 @@ export const useOrgChartStore = create<OrgChartState & OrgChartActions>()(
       zoomOut: () =>
         set((state) => ({ zoom: toZoom(state.zoom - ORG_CHART_ZOOM.step) })),
       resetZoom: () => set({ zoom: ORG_CHART_ZOOM.initial }),
+      ownershipOpen: true,
+      toggleOwnership: () =>
+        set((state) => ({ ownershipOpen: !state.ownershipOpen })),
     }),
     {
       name: "openhands-org-chart",
@@ -48,6 +54,7 @@ export const useOrgChartStore = create<OrgChartState & OrgChartActions>()(
       partialize: (state): OrgChartState => ({
         view: state.view,
         zoom: state.zoom,
+        ownershipOpen: state.ownershipOpen,
       }),
       merge: (persisted, current) => {
         const stored = (persisted ?? {}) as Partial<OrgChartState>;
@@ -55,6 +62,7 @@ export const useOrgChartStore = create<OrgChartState & OrgChartActions>()(
           ...current,
           view: stored.view === "full" ? "full" : "focused",
           zoom: toZoom(stored.zoom),
+          ownershipOpen: stored.ownershipOpen !== false,
         };
       },
     },

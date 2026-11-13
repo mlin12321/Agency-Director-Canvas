@@ -14,7 +14,11 @@ function restore(state: unknown) {
 describe("org-chart store", () => {
   beforeEach(() => {
     window.localStorage.clear();
-    useOrgChartStore.setState({ view: "focused", zoom: 1 });
+    useOrgChartStore.setState({
+      view: "focused",
+      zoom: 1,
+      ownershipOpen: true,
+    });
   });
 
   it("restores the view and zoom of the last visit", async () => {
@@ -24,6 +28,14 @@ describe("org-chart store", () => {
       view: "full",
       zoom: 0.6,
     });
+  });
+
+  it("shows the ownership map until it was closed", async () => {
+    await restore({ view: "focused", zoom: 1 });
+    expect(useOrgChartStore.getState().ownershipOpen).toBe(true);
+
+    await restore({ ownershipOpen: false });
+    expect(useOrgChartStore.getState().ownershipOpen).toBe(false);
   });
 
   it.each([

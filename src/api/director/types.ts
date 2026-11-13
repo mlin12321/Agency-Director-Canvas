@@ -187,6 +187,8 @@ export interface Autopsy {
   at: string;
   approach: string;
   why_failed: string;
+  /** The git ref that holds the uncommitted changes the prune discarded. */
+  saved_ref?: string | null;
 }
 
 export interface BoundaryMemory {
@@ -196,14 +198,65 @@ export interface BoundaryMemory {
 export interface InheritedSpec {
   path: string;
   spec: string;
-  /** Ancestor specs are invariants; only the node's own spec is writable. */
+  /** False for the spec of the node's own boundary, which its IC writes. */
   readonly: boolean;
 }
 
+/** What the sub-teams of one boundary must keep between them. */
+export interface BoundaryContracts {
+  /** The boundary that was split. */
+  path: string;
+  contracts: string;
+  /**
+   * True for the contracts between the node's own sub-teams; false for the
+   * ones the team above set, which the node keeps with the teams beside it.
+   */
+  own: boolean;
+}
+
 export interface NodeBlackboard {
+  /** The spec of the node's own boundary, when it has one. */
   specs: InheritedSpec[];
+  contracts?: BoundaryContracts[];
   memory: BoundaryMemory;
   autopsies: Autopsy[];
+}
+
+/** A direct report, as the owner of a directory. */
+export interface BoundaryOwner {
+  node_id: NodeId;
+  title: string;
+  /** The directory it owns, relative to the repository. */
+  path: string;
+  isolation: IsolationMode;
+  branch: string;
+}
+
+export interface OwnedFile {
+  /** Relative to the repository. */
+  path: string;
+  /** The direct report that owns the file; null when the node kept it. */
+  owner: NodeId | null;
+}
+
+/** A file the committed work of two teams changed in ways that do not merge. */
+export interface Collision {
+  path: string;
+  /** The teams whose checkouts collide, the node itself included. */
+  node_ids: NodeId[];
+}
+
+/** How a node's boundary is divided among its direct reports. */
+export interface NodeOwnership {
+  node_id: NodeId;
+  owners: BoundaryOwner[];
+  /** The unignored files of the node's boundary in its own checkout. */
+  files: OwnedFile[];
+  truncated: boolean;
+  /** From the tips of the checkouts; uncommitted changes are not compared. */
+  collisions: Collision[];
+  /** False when the server's git is too old to look for collisions. */
+  collisions_checked: boolean;
 }
 
 /**
