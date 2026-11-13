@@ -258,7 +258,7 @@ export function OrgChartView({ nodeId }: OrgChartViewProps) {
       <div className="flex min-w-0 flex-1 flex-col gap-4 p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <OrgBreadcrumb ancestors={ancestors} current={current} />
-          <div className="flex items-center gap-3">
+          <div className="flex min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-2">
             {stale ? (
               <span role="status" className="text-xs text-feedback-warning">
                 {t(I18nKey.ORG_CHART$RECONNECTING)}

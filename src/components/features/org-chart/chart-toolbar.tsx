@@ -9,7 +9,7 @@ import {
 import { cn } from "#/utils/utils";
 
 const BUTTON =
-  "flex h-7 items-center justify-center rounded-md px-2 text-xs text-text-secondary hover:bg-surface-raised hover:text-contrast disabled:opacity-40 disabled:hover:bg-transparent";
+  "flex h-7 shrink-0 items-center justify-center whitespace-nowrap rounded-md px-2 text-xs text-text-secondary hover:bg-surface-raised hover:text-contrast disabled:opacity-40 disabled:hover:bg-transparent";
 
 const VIEWS: Array<{ mode: OrgChartViewMode; label: I18nKey }> = [
   { mode: "focused", label: I18nKey.ORG_CHART$VIEW_FOCUSED },
@@ -26,7 +26,7 @@ export function ChartToolbar() {
   const zooms = view !== "by_state";
 
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex shrink-0 items-center gap-3">
       <div
         role="group"
         aria-label={t(I18nKey.ORG_CHART$VIEW)}

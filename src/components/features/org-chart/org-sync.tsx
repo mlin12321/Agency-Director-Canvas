@@ -5,7 +5,7 @@ import type { OrgSync as SyncResult } from "#/api/director/types";
 import { I18nKey } from "#/i18n/declaration";
 
 const BUTTON =
-  "flex h-7 items-center justify-center rounded-md px-2 text-xs text-text-secondary hover:bg-surface-raised hover:text-contrast disabled:opacity-40 disabled:hover:bg-transparent";
+  "flex h-7 shrink-0 items-center justify-center whitespace-nowrap rounded-md px-2 text-xs text-text-secondary hover:bg-surface-raised hover:text-contrast disabled:opacity-40 disabled:hover:bg-transparent";
 
 const OUTCOME_KEYS = {
   up_to_date: I18nKey.ORG_CHART$BLACKBOARD_UP_TO_DATE,
